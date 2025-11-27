@@ -66,3 +66,4 @@ textarea{min-height:100px}
 .user-state #btnLogout{display:none}
 .logo{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;overflow:hidden}
 .input-topbar .remember{display:flex;align-items:center;gap:6px;white-space:nowrap}
+#qrCamera{width:100%;max-height:60vh;border:1px solid #eee;border-radius:8px;background:#000}
