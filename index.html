@@ -133,15 +133,76 @@
 
     <section id="tab-settings" class="panel">
       <div class="card">
-        <h2>設定</h2>
-        <div class="grid">
-          <textarea id="firebaseConfigJson" placeholder="貼上 Firebase Config JSON"></textarea>
-          <button id="btnSaveFirebase" class="btn">儲存設定</button>
-          <button id="btnEnablePersistence" class="btn ghost">啟用離線資料庫</button>
-          <button id="btnClearLocal" class="btn outline">清除本機資料</button>
+        <h2>帳號列表</h2>
+        <div class="toolbar">
+          <button id="btnOpenAccount" class="btn">新增帳號</button>
+        </div>
+        <div class="table accounts-table">
+          <div class="list head" id="accountsHead">
+            <div class="col">角色</div>
+            <div class="col">姓名</div>
+            <div class="col">手機號碼</div>
+            <div class="col">電子郵件</div>
+            <div class="col">服務社區</div>
+            <div class="col">操作</div>
+          </div>
+          <div class="list" id="accountsList"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>社區列表</h2>
+        <div class="toolbar">
+          <button id="btnOpenCommunity" class="btn">新增社區</button>
+        </div>
+        <div class="table communities-table">
+          <div class="list head" id="communitiesHead">
+            <div class="col">社區代號</div>
+            <div class="col">社區名稱</div>
+            <div class="col">區域</div>
+            <div class="col">操作</div>
+          </div>
+          <div class="list" id="communitiesList"></div>
         </div>
       </div>
     </section>
+
+    <div id="modalCommunity" class="modal hidden">
+      <div class="dialog">
+        <h3>社區資料</h3>
+        <div class="grid">
+          <input id="mCommCode" placeholder="社區代號">
+          <input id="mCommName" placeholder="社區名稱">
+          <select id="mCommArea">
+            <option value="台北">台北</option>
+            <option value="新北">新北</option>
+            <option value="桃園">桃園</option>
+          </select>
+          <button id="btnSaveCommunity" class="btn">儲存</button>
+          <button id="btnCancelCommunity" class="btn outline">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modalAccount" class="modal hidden">
+      <div class="dialog">
+        <h3>帳號資料</h3>
+        <div class="grid">
+          <select id="mAccRole">
+            <option value="系統管理員">系統管理員</option>
+            <option value="主管">主管</option>
+            <option value="勤務">勤務</option>
+            <option value="保全">保全</option>
+          </select>
+          <input id="mAccName" placeholder="姓名">
+          <input id="mAccPhone" placeholder="手機號碼">
+          <input id="mAccEmail" type="email" placeholder="電子郵件">
+          <div class="row"><label><input type="checkbox" id="mSelectAllComms"> 全選社區</label></div>
+          <div id="mServiceComms" class="checks"></div>
+          <button id="btnSaveAccount" class="btn">儲存</button>
+          <button id="btnCancelAccount" class="btn outline">取消</button>
+        </div>
+      </div>
+    </div>
   </main>
 
   <footer class="app-footer">

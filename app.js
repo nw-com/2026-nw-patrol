@@ -21,32 +21,33 @@ const DEFAULT_FIREBASE_CONFIG = {
   measurementId: "G-2TTZ9018CJ"
 };
 
-let firebaseApp=null, auth=null, firestore=null, storage=null;
+let firebaseApp=null, auth=null, firestore=null;
 let db=null;
 
 async function loadFirebase(){
   const appMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js');
   const authMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');
   const fsMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');
-  const stMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js');
   let cfgStr = localStorage.getItem('firebaseConfig');
   if(!cfgStr){cfgStr = JSON.stringify(DEFAULT_FIREBASE_CONFIG); localStorage.setItem('firebaseConfig', cfgStr);} 
   const cfg = JSON.parse(cfgStr);
   firebaseApp = appMod.initializeApp(cfg);
   auth = authMod.getAuth(firebaseApp);
-  firestore = fsMod.getFirestore(firebaseApp);
-  storage = stMod.getStorage(firebaseApp);
-  try{await fsMod.enableIndexedDbPersistence(firestore)}catch(e){}
+  try{await authMod.setPersistence(auth, authMod.browserLocalPersistence)}catch(e){}
+  firestore = fsMod.initializeFirestore(firebaseApp,{experimentalForceLongPolling:true,useFetchStreams:false});
+  
 }
 
 async function openIDB(){
   return new Promise((resolve,reject)=>{
-    const req = indexedDB.open('nw-patrol',1);
+    const req = indexedDB.open('nw-patrol',2);
     req.onupgradeneeded = ()=>{
       const d = req.result;
       if(!d.objectStoreNames.contains('points')){d.createObjectStore('points',{keyPath:'code'})}
       if(!d.objectStoreNames.contains('checkins')){d.createObjectStore('checkins',{keyPath:'id'})}
       if(!d.objectStoreNames.contains('photos')){d.createObjectStore('photos',{keyPath:'id'})}
+      if(!d.objectStoreNames.contains('communities')){d.createObjectStore('communities',{keyPath:'code'})}
+      if(!d.objectStoreNames.contains('accounts')){d.createObjectStore('accounts',{keyPath:'id'})}
     };
     req.onsuccess = ()=>resolve(req.result);
     req.onerror = ()=>reject(req.error);
@@ -70,16 +71,16 @@ const btnSaveFirebase = document.getElementById('btnSaveFirebase');
 const btnEnablePersistence = document.getElementById('btnEnablePersistence');
 const btnClearLocal = document.getElementById('btnClearLocal');
 
-btnSaveFirebase.addEventListener('click',async()=>{if(!firebaseConfigJson.value.trim())return;localStorage.setItem('firebaseConfig',firebaseConfigJson.value.trim());await loadFirebase();firebaseConfigJson.value=localStorage.getItem('firebaseConfig')||''});
-btnEnablePersistence.addEventListener('click',async()=>{if(!firestore)return;const fsMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');try{await fsMod.enableIndexedDbPersistence(firestore)}catch(e){}});
-btnClearLocal.addEventListener('click',async()=>{indexedDB.deleteDatabase('nw-patrol');location.reload()});
+if(btnSaveFirebase){btnSaveFirebase.addEventListener('click',async()=>{if(!firebaseConfigJson.value.trim())return;localStorage.setItem('firebaseConfig',firebaseConfigJson.value.trim());await loadFirebase();firebaseConfigJson.value=localStorage.getItem('firebaseConfig')||''})}
+if(btnEnablePersistence){btnEnablePersistence.addEventListener('click',async()=>{if(!firestore)return;const fsMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');try{await fsMod.enableIndexedDbPersistence(firestore)}catch(e){}})}
+if(btnClearLocal){btnClearLocal.addEventListener('click',async()=>{indexedDB.deleteDatabase('nw-patrol');location.reload()})}
 
 btnLogin.addEventListener('click',async()=>{if(!auth)return;const {signInWithEmailAndPassword}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');try{await signInWithEmailAndPassword(auth,loginEmail.value,loginPassword.value)}catch(e){}});
 if(btnSignup){btnSignup.addEventListener('click',async()=>{if(!auth)return;const {createUserWithEmailAndPassword}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');try{await createUserWithEmailAndPassword(auth,loginEmail.value,loginPassword.value)}catch(e){}})}
 if(btnGoogle){btnGoogle.addEventListener('click',async()=>{if(!auth)return;const {GoogleAuthProvider,signInWithPopup}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){}})}
 btnLogout.addEventListener('click',async()=>{if(!auth)return;const {signOut}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');await signOut(auth)});
 
-async function refreshAuthState(){if(!auth)return;const {onAuthStateChanged}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');onAuthStateChanged(auth,u=>{userEmail.textContent=u?u.email:'';isAuthed=!!u;btnLogout.style.display=isAuthed?'inline-block':'none';updateNavVisibility();setActiveTab(isAuthed?'home':'login')})}
+async function refreshAuthState(){if(!auth)return;const {onAuthStateChanged}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');onAuthStateChanged(auth,async u=>{let nameText='';if(u){const items=await getAll('accounts');const acc=items.find(x=>x.id===u.uid||x.email===u.email);nameText=acc?acc.name:(u.displayName||'')}userEmail.textContent=nameText;isAuthed=!!u;btnLogout.style.display=isAuthed?'inline-block':'none';updateNavVisibility();setActiveTab(isAuthed?'home':'login');if(isAuthed){await ensureCurrentUserAccount()}if(isAuthed&&navigator.onLine){await syncCommunitiesFromCloud();await syncAccountsFromCloud();renderCommunities();renderAccounts()}})}
 
 const pointName = document.getElementById('pointName');
 const pointCode = document.getElementById('pointCode');
@@ -161,17 +162,16 @@ const syncStatus = document.getElementById('syncStatus');
 
 async function renderHistory(){const items=await getAll('checkins');historyList.innerHTML='';items.sort((a,b)=>b.createdAt-a.createdAt).forEach(c=>{const el=document.createElement('div');el.className='item';const d=new Date(c.createdAt);el.innerHTML=`<div><strong>${c.pointName||c.pointCode}</strong><br><span>${d.toLocaleString()} • ${c.note||''}</span></div><span>${c.pending?'待同步':'已同步'}</span>`;historyList.appendChild(el)});updateHome()}
 
-async function syncNow(){if(!auth||!firestore||!storage||!navigator.onLine){syncStatus.textContent='無法同步';return}
+async function syncNow(){if(!auth||!firestore||!navigator.onLine){syncStatus.textContent='無法同步';return}
   syncStatus.textContent='同步中';
   const fsMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');
-  const stMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js');
   const user = auth.currentUser; if(!user){syncStatus.textContent='請先登入';return}
   const pending = (await getAll('checkins')).filter(x=>x.pending);
   for(const c of pending){
-    let photoURL='';
-    if(c.photoId){const phReq=tx('photos','readonly').get(c.photoId);await new Promise(r=>phReq.onsuccess=r);const rec=phReq.result;if(rec&&rec.blob){const ref=stMod.ref(storage,`checkins/${user.uid}/${c.id}.jpg`);await stMod.uploadBytes(ref,rec.blob);photoURL=await stMod.getDownloadURL(ref)}}
+    let photoData='';
+    if(c.photoId){const phReq=tx('photos','readonly').get(c.photoId);await new Promise(r=>phReq.onsuccess=r);const rec=phReq.result;if(rec&&rec.blob){photoData=await compressImageBlob(rec.blob)}}
     const docRef = fsMod.doc(firestore,`orgs/default/checkins/${c.id}`);
-    await fsMod.setDoc(docRef,{userId:user.uid,pointCode:c.pointCode,pointName:c.pointName,note:c.note,createdAt:c.createdAt,photoURL});
+    await fsMod.setDoc(docRef,{userId:user.uid,pointCode:c.pointCode,pointName:c.pointName,note:c.note,createdAt:c.createdAt,photoData});
     tx('checkins','readwrite').put({...c,pending:false});
   }
   renderHistory();
@@ -202,9 +202,58 @@ const homeCheckinsCount=document.getElementById('homeCheckinsCount');
 const homePendingCount=document.getElementById('homePendingCount');
 async function updateHome(){const pts=await getAll('points');const ch=await getAll('checkins');const pend=ch.filter(x=>x.pending).length;if(homePointsCount)homePointsCount.textContent=String(pts.length);if(homeCheckinsCount)homeCheckinsCount.textContent=String(ch.length);if(homePendingCount)homePendingCount.textContent=String(pend)}
 
-(async()=>{db=await openIDB();await loadFirebase();firebaseConfigJson.value=localStorage.getItem('firebaseConfig')||'';await refreshAuthState();updateNavVisibility();await renderPoints();await renderHistory();setActiveTab('login')})();
+(async()=>{db=await openIDB();await loadFirebase();if(firebaseConfigJson){firebaseConfigJson.value=localStorage.getItem('firebaseConfig')||''}await refreshAuthState();updateNavVisibility();await renderPoints();await renderHistory();})();
+
+const btnOpenCommunity=document.getElementById('btnOpenCommunity');
+const modalCommunity=document.getElementById('modalCommunity');
+const mCommCode=document.getElementById('mCommCode');
+const mCommName=document.getElementById('mCommName');
+const mCommArea=document.getElementById('mCommArea');
+const btnSaveCommunity=document.getElementById('btnSaveCommunity');
+const btnCancelCommunity=document.getElementById('btnCancelCommunity');
+const communitiesList=document.getElementById('communitiesList');
+const btnOpenAccount=document.getElementById('btnOpenAccount');
+const modalAccount=document.getElementById('modalAccount');
+const mAccRole=document.getElementById('mAccRole');
+const mAccName=document.getElementById('mAccName');
+const mAccPhone=document.getElementById('mAccPhone');
+const mAccEmail=document.getElementById('mAccEmail');
+const btnSaveAccount=document.getElementById('btnSaveAccount');
+const btnCancelAccount=document.getElementById('btnCancelAccount');
+const accountsList=document.getElementById('accountsList');
+const mServiceComms=document.getElementById('mServiceComms');
+const mSelectAllComms=document.getElementById('mSelectAllComms');
+
+async function renderCommunities(){if(!communitiesList)return;const items=await getAll('communities');communitiesList.innerHTML='';items.forEach(c=>{const el=document.createElement('div');el.className='item';el.innerHTML=`<div>${c.code}</div><div>${c.name}</div><div>${c.area}</div><div><button class=\"btn\" data-act=\"edit\" data-code=\"${c.code}\">編輯</button> <button class=\"btn outline\" data-act=\"del\" data-code=\"${c.code}\">刪除</button></div>`;el.querySelector('[data-act="edit"]').addEventListener('click',()=>openCommunityModal('edit',c));el.querySelector('[data-act="del"]').addEventListener('click',()=>{if(!confirm(`確定要刪除社區 ${c.name}？`))return;tx('communities','readwrite').delete(c.code).onsuccess=()=>{deleteCommunityCloud(c.code);renderCommunities()}});communitiesList.appendChild(el)})}
+
+function buildServiceComms(container, selectAll){if(!container)return;container.innerHTML='';getAll('communities').then(items=>{items.forEach(c=>{const id='mcomm-'+c.code;const w=document.createElement('label');w.className='check';w.innerHTML=`<input type="checkbox" value="${c.code}" id="${id}"> <span>${c.name}</span>`;container.appendChild(w)});if(selectAll){selectAll.checked=false;selectAll.onclick=()=>{const boxes=container.querySelectorAll('input[type="checkbox"]');boxes.forEach(b=>b.checked=selectAll.checked)}}})}
+
+async function renderAccounts(){if(!accountsList)return;const items=await getAll('accounts');accountsList.innerHTML='';items.forEach(a=>{const el=document.createElement('div');el.className='item';const svc=(a.serviceCommunities||[]).join(',');el.innerHTML=`<div>${a.role||''}</div><div>${a.name||''}</div><div>${a.phone||''}</div><div>${a.email||''}</div><div>${svc}</div><div><button class=\"btn\" data-act=\"edit\" data-id=\"${a.id}\">編輯</button> <button class=\"btn outline\" data-act=\"del\" data-id=\"${a.id}\">刪除</button></div>`;el.querySelector('[data-act="edit"]').addEventListener('click',()=>openAccountModal('edit',a));el.querySelector('[data-act="del"]').addEventListener('click',()=>{if(!confirm(`確定要刪除帳號 ${a.name}？`))return;tx('accounts','readwrite').delete(a.id).onsuccess=()=>{deleteAccountCloud(a.id);renderAccounts()}});accountsList.appendChild(el)})}
+
+async function ensureCurrentUserAccount(){const u=auth.currentUser;if(!u)return;const items=await getAll('accounts');let ex=items.find(x=>x.id===u.uid||x.email===u.email);if(ex)return;const item={id:u.uid,role:'一般',name:u.displayName||'',phone:'',email:u.email||'',serviceCommunities:[],updatedAt:Date.now()};return new Promise(r=>{tx('accounts','readwrite').put(item).onsuccess=()=>{upsertAccountCloud(item);renderAccounts();r()}})}
+
+function openCommunityModal(mode,data){modalCommunity.classList.remove('hidden');modalCommunity.dataset.mode=mode||'create';mCommCode.disabled=mode==='edit';mCommCode.value=data?data.code:'';mCommName.value=data?data.name:'';mCommArea.value=data?data.area:'台北';if(!mCommArea.value)mCommArea.value='台北'}
+function closeCommunityModal(){modalCommunity.classList.add('hidden')}
+if(btnOpenCommunity){btnOpenCommunity.addEventListener('click',()=>openCommunityModal('create'))}
+if(btnCancelCommunity){btnCancelCommunity.addEventListener('click',closeCommunityModal)}
+if(btnSaveCommunity){btnSaveCommunity.addEventListener('click',()=>{const code=mCommCode.value.trim();const name=mCommName.value.trim();const area=mCommArea.value.trim();if(!code||!name||!area)return;const item={code,name,area,updatedAt:Date.now()};tx('communities','readwrite').put(item).onsuccess=()=>{closeCommunityModal();upsertCommunityCloud(item);renderCommunities()}})}
+
+function openAccountModal(mode,data){modalAccount.classList.remove('hidden');modalAccount.dataset.mode=mode||'create';modalAccount.dataset.id=data?data.id:'';mAccRole.value=data?data.role:'';mAccName.value=data?data.name:'';mAccPhone.value=data?data.phone:'';mAccEmail.value=data?data.email:'';buildServiceComms(mServiceComms,mSelectAllComms);setTimeout(()=>{if(data&&data.serviceCommunities){mServiceComms.querySelectorAll('input[type="checkbox"]').forEach(b=>{b.checked=data.serviceCommunities.includes(b.value)})}},100)}
+function closeAccountModal(){modalAccount.classList.add('hidden')}
+if(btnOpenAccount){btnOpenAccount.addEventListener('click',()=>openAccountModal('create'))}
+if(btnCancelAccount){btnCancelAccount.addEventListener('click',closeAccountModal)}
+if(btnSaveAccount){btnSaveAccount.addEventListener('click',()=>{const id=modalAccount.dataset.mode==='edit'?modalAccount.dataset.id:uuid();const selected=[];mServiceComms.querySelectorAll('input[type="checkbox"]:checked').forEach(b=>selected.push(b.value));const item={id,role:mAccRole.value.trim(),name:mAccName.value.trim(),phone:mAccPhone.value.trim(),email:mAccEmail.value.trim(),serviceCommunities:selected,updatedAt:Date.now()};if(!item.role||!item.name||!item.phone||!item.email)return;tx('accounts','readwrite').put(item).onsuccess=()=>{closeAccountModal();upsertAccountCloud(item);renderAccounts()}})}
+
+async function upsertCommunityCloud(c){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/communities/${c.code}`);await fsMod.setDoc(ref,c,{merge:true})}
+async function deleteCommunityCloud(code){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/communities/${code}`);await fsMod.deleteDoc(ref)}
+async function syncCommunitiesFromCloud(){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const col=fsMod.collection(firestore,'orgs/default/communities');const snap=await fsMod.getDocs(col);const store=tx('communities','readwrite');snap.forEach(d=>{store.put({...d.data()})})}
+
+async function upsertAccountCloud(a){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/accounts/${a.id}`);await fsMod.setDoc(ref,a,{merge:true})}
+async function deleteAccountCloud(id){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/accounts/${id}`);await fsMod.deleteDoc(ref)}
+async function syncAccountsFromCloud(){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const col=fsMod.collection(firestore,'orgs/default/accounts');const snap=await fsMod.getDocs(col);const store=tx('accounts','readwrite');snap.forEach(d=>{store.put({...d.data()})})}
 
 if(togglePassword){togglePassword.addEventListener('click',()=>{loginPassword.type=loginPassword.type==='password'?'text':'password'})}
 const savedEmail=localStorage.getItem('rememberEmail')||'';if(savedEmail){loginEmail.value=savedEmail;if(loginRemember)loginRemember.checked=true}
 if(loginRemember){loginRemember.addEventListener('change',()=>{if(loginRemember.checked){localStorage.setItem('rememberEmail',loginEmail.value||'')}else{localStorage.removeItem('rememberEmail')}})}
 if(btnLogin){btnLogin.addEventListener('click',()=>{if(loginRemember&&loginRemember.checked){localStorage.setItem('rememberEmail',loginEmail.value||'')}})}
+async function compressImageBlob(blob){return new Promise(res=>{const url=URL.createObjectURL(blob);const img=new Image();img.onload=()=>{let w=img.width,h=img.height;const m=1024;if(w>m||h>m){const s=Math.min(m/w,m/h);w=Math.round(w*s);h=Math.round(h*s)}const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d');ctx.drawImage(img,0,0,w,h);const data=c.toDataURL('image/jpeg',0.7);URL.revokeObjectURL(url);res(data)};img.src=url})}
