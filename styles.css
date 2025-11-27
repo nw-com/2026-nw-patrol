@@ -24,7 +24,9 @@ textarea{min-height:100px}
 .input-wrap input{padding-left:40px}
 .input-wrap .input-action{position:absolute;right:10px;top:50%;transform:translateY(-50%);appearance:none;border:0;background:transparent;color:var(--muted);cursor:pointer;padding:0}
 .btn{appearance:none;border:0;background:var(--primary);color:#fff;padding:10px 14px;border-radius:8px;cursor:pointer}
-.btn.big{padding:18px 20px;font-size:18px;width:100%}
+.btn.big{padding:60px 24px;font-size:24px;width:100%}
+#tab-scan .grid{gap:6px}
+#tab-scan .row{min-height:0;align-items:stretch;padding:0}
 .btn:hover{background:var(--primary-600)}
 .btn.outline{background:transparent;color:var(--primary);border:1px solid var(--primary)}
 .btn.ghost{background:#eee;color:#333}

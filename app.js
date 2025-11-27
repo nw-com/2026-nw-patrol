@@ -79,10 +79,10 @@ if(btnSaveFirebase){btnSaveFirebase.addEventListener('click',async()=>{if(!fireb
 if(btnEnablePersistence){btnEnablePersistence.addEventListener('click',async()=>{if(!firestore)return;const fsMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');try{await fsMod.enableIndexedDbPersistence(firestore)}catch(e){}})}
 if(btnClearLocal){btnClearLocal.addEventListener('click',async()=>{indexedDB.deleteDatabase('nw-patrol');location.reload()})}
 
-btnLogin.addEventListener('click',async()=>{if(!auth)return;const {signInWithEmailAndPassword}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');try{await signInWithEmailAndPassword(auth,loginEmail.value,loginPassword.value)}catch(e){}});
+if(btnLogin){btnLogin.addEventListener('click',async()=>{if(!auth)return;const {signInWithEmailAndPassword}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');try{await signInWithEmailAndPassword(auth,loginEmail.value,loginPassword.value)}catch(e){}})}
 if(btnSignup){btnSignup.addEventListener('click',async()=>{if(!auth)return;const {createUserWithEmailAndPassword}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');try{await createUserWithEmailAndPassword(auth,loginEmail.value,loginPassword.value)}catch(e){}})}
 if(btnGoogle){btnGoogle.addEventListener('click',async()=>{if(!auth)return;const {GoogleAuthProvider,signInWithPopup}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){}})}
-btnLogout.addEventListener('click',async()=>{if(!auth)return;const {signOut}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');await signOut(auth)});
+if(btnLogout){btnLogout.addEventListener('click',async()=>{if(!auth)return;const {signOut}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');await signOut(auth)})}
 
 async function refreshAuthState(){if(!auth)return;const {onAuthStateChanged}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');onAuthStateChanged(auth,async u=>{let nameText='';if(u){const items=await getAll('accounts');const acc=items.find(x=>x.id===u.uid||x.email===u.email);nameText=acc?acc.name:(u.displayName||'')}userEmail.textContent=nameText;isAuthed=!!u;btnLogout.style.display=isAuthed?'inline-block':'none';updateNavVisibility();setActiveTab(isAuthed?'home':'login');if(isAuthed){await ensureCurrentUserAccount()}if(isAuthed&&navigator.onLine){await syncCommunitiesFromCloud();await syncAccountsFromCloud();await syncTasksFromCloud();renderCommunities();renderAccounts();renderTasks()}})}
 
@@ -116,8 +116,20 @@ const btnCheckin = document.getElementById('btnCheckin');
 const scanStatus = document.getElementById('scanStatus');
 const btnMainQR = document.getElementById('btnMainQR');
 const btnMainNFC = document.getElementById('btnMainNFC');
+const modalScanQR=document.getElementById('modalScanQR');
+const qrCamera=document.getElementById('qrCamera');
+const scanCodeDisplay=document.getElementById('scanCodeDisplay');
+const scanTimeDisplay=document.getElementById('scanTimeDisplay');
+const btnScanConfirm=document.getElementById('btnScanConfirm');
+const btnScanCancel=document.getElementById('btnScanCancel');
+const modalPostActions=document.getElementById('modalPostActions');
+const postNote=document.getElementById('postNote');
+const postPhoto=document.getElementById('postPhoto');
+const btnPostConfirm=document.getElementById('btnPostConfirm');
+const btnPostCancel=document.getElementById('btnPostCancel');
 
 let mediaStream=null, scanTimer=null, currentPoint=null;
+let latestScanCode='';let latestScanTime=0;let latestRequirePhoto=false;let latestRequireReport=false;let latestPointName='';
 
 async function startScan(){
   if(!('BarcodeDetector' in window))return;
@@ -149,22 +161,26 @@ async function startNFC(){
   }catch(err){}
 }
 
-async function useCode(code){if(!code)return;const p=(await getAll('points')).find(x=>x.code===code);currentPoint=p||{code,name:'未知點位'};currentPointName.value=currentPoint.name;scanStatus.textContent=`已識別代碼 ${code}`}
+async function useCode(code){if(!code)return;const p=(await getAll('points')).find(x=>x.code===code);currentPoint=p||{code,name:'未知點位'};if(currentPointName){currentPointName.value=currentPoint.name}if(scanStatus){scanStatus.textContent=`已識別代碼 ${code}`}}
 
 if(btnStartScan){btnStartScan.addEventListener('click',startScan)}
 if(btnStopScan){btnStopScan.addEventListener('click',stopScan)}
 if(btnStartNFC){btnStartNFC.addEventListener('click',startNFC)}
 if(btnUseCode){btnUseCode.addEventListener('click',()=>useCode(manualCode.value))}
-if(btnMainQR){btnMainQR.addEventListener('click',startScan)}
+if(btnMainQR){btnMainQR.addEventListener('click',openQRModal)}
 if(btnMainNFC){btnMainNFC.addEventListener('click',startNFC)}
+if(btnScanCancel){btnScanCancel.addEventListener('click',closeQRModal)}
+if(btnScanConfirm){btnScanConfirm.addEventListener('click',afterScanConfirm)}
+if(btnPostCancel){btnPostCancel.addEventListener('click',closePostModal)}
+if(btnPostConfirm){btnPostConfirm.addEventListener('click',confirmPost)}
 
-btnCheckin.addEventListener('click',async()=>{
+if(btnCheckin){btnCheckin.addEventListener('click',async()=>{
   const id=uuid();
   const item={id,pointCode:currentPoint?currentPoint.code:manualCode.value,pointName:currentPoint?currentPoint.name:'',note:taskNote.value||'',createdAt:Date.now(),pending:true,photoId:null};
   tx('checkins','readwrite').put(item);
-  if(photoInput.files&&photoInput.files[0]){const phId=uuid();const fr=new FileReader();fr.onload=()=>{tx('photos','readwrite').put({id:phId,checkinId:id,blob:new Blob([fr.result])});tx('checkins','readwrite').put({...item,photoId:phId});renderHistory()};fr.readAsArrayBuffer(photoInput.files[0])}else{renderHistory()}
-  currentPoint=null;currentPointName.value='';taskNote.value='';photoInput.value='';scanStatus.textContent='已建立本機打卡'
-});
+  if(photoInput&&photoInput.files&&photoInput.files[0]){const phId=uuid();const fr=new FileReader();fr.onload=()=>{tx('photos','readwrite').put({id:phId,checkinId:id,blob:new Blob([fr.result])});tx('checkins','readwrite').put({...item,photoId:phId});renderHistory()};fr.readAsArrayBuffer(photoInput.files[0])}else{renderHistory()}
+  currentPoint=null;if(currentPointName){currentPointName.value=''}if(taskNote){taskNote.value=''}if(photoInput){photoInput.value=''}if(scanStatus){scanStatus.textContent='已建立本機打卡'}
+})}
 
 const historyList = document.getElementById('historyList');
 const btnSync = document.getElementById('btnSync');
@@ -234,6 +250,7 @@ const mAccRole=document.getElementById('mAccRole');
 const mAccName=document.getElementById('mAccName');
 const mAccPhone=document.getElementById('mAccPhone');
 const mAccEmail=document.getElementById('mAccEmail');
+const mAccPassword=document.getElementById('mAccPassword');
 const btnSaveAccount=document.getElementById('btnSaveAccount');
 const btnCancelAccount=document.getElementById('btnCancelAccount');
 const accountsList=document.getElementById('accountsList');
@@ -276,11 +293,11 @@ if(btnOpenCommunity){btnOpenCommunity.addEventListener('click',()=>openCommunity
 if(btnCancelCommunity){btnCancelCommunity.addEventListener('click',closeCommunityModal)}
 if(btnSaveCommunity){btnSaveCommunity.addEventListener('click',()=>{const code=mCommCode.value.trim();const name=mCommName.value.trim();const area=mCommArea.value.trim();if(!code||!name||!area)return;const item={code,name,area,updatedAt:Date.now()};tx('communities','readwrite').put(item).onsuccess=()=>{closeCommunityModal();upsertCommunityCloud(item);renderCommunities()}})}
 
-function openAccountModal(mode,data){modalAccount.classList.remove('hidden');modalAccount.dataset.mode=mode||'create';modalAccount.dataset.id=data?data.id:'';mAccRole.value=data?data.role:'';mAccName.value=data?data.name:'';mAccPhone.value=data?data.phone:'';mAccEmail.value=data?data.email:'';buildServiceComms(mServiceComms,mSelectAllComms);setTimeout(()=>{if(data&&data.serviceCommunities){mServiceComms.querySelectorAll('input[type="checkbox"]').forEach(b=>{b.checked=data.serviceCommunities.includes(b.value)})}},100)}
+function openAccountModal(mode,data){modalAccount.classList.remove('hidden');modalAccount.dataset.mode=mode||'create';modalAccount.dataset.id=data?data.id:'';mAccRole.value=data?data.role:'';mAccName.value=data?data.name:'';mAccPhone.value=data?data.phone:'';mAccEmail.value=data?data.email:'';if(mAccPassword)mAccPassword.value='';buildServiceComms(mServiceComms,mSelectAllComms);setTimeout(()=>{if(data&&data.serviceCommunities){mServiceComms.querySelectorAll('input[type="checkbox"]').forEach(b=>{b.checked=data.serviceCommunities.includes(b.value)})}},100)}
 function closeAccountModal(){modalAccount.classList.add('hidden')}
 if(btnOpenAccount){btnOpenAccount.addEventListener('click',()=>openAccountModal('create'))}
 if(btnCancelAccount){btnCancelAccount.addEventListener('click',closeAccountModal)}
-if(btnSaveAccount){btnSaveAccount.addEventListener('click',()=>{const id=modalAccount.dataset.mode==='edit'?modalAccount.dataset.id:uuid();const selected=[];mServiceComms.querySelectorAll('input[type="checkbox"]:checked').forEach(b=>selected.push(b.value));const item={id,role:mAccRole.value.trim(),name:mAccName.value.trim(),phone:mAccPhone.value.trim(),email:mAccEmail.value.trim(),serviceCommunities:selected,updatedAt:Date.now()};if(!item.role||!item.name||!item.phone||!item.email)return;tx('accounts','readwrite').put(item).onsuccess=()=>{closeAccountModal();upsertAccountCloud(item);renderAccounts()}})}
+if(btnSaveAccount){btnSaveAccount.addEventListener('click',async()=>{const id=modalAccount.dataset.mode==='edit'?modalAccount.dataset.id:uuid();const selected=[];mServiceComms.querySelectorAll('input[type="checkbox"]:checked').forEach(b=>selected.push(b.value));const item={id,role:mAccRole.value.trim(),name:mAccName.value.trim(),phone:mAccPhone.value.trim(),email:mAccEmail.value.trim(),serviceCommunities:selected,updatedAt:Date.now()};if(!item.role||!item.name||!item.phone||!item.email)return;try{if(auth&&auth.currentUser&&modalAccount.dataset.mode==='edit'&&id===auth.currentUser.uid&&mAccPassword&&mAccPassword.value.trim()){const {updatePassword}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');await updatePassword(auth.currentUser,mAccPassword.value.trim())}}catch(e){}tx('accounts','readwrite').put(item).onsuccess=()=>{closeAccountModal();upsertAccountCloud(item);renderAccounts()}})}
 
 async function upsertCommunityCloud(c){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/communities/${c.code}`);await fsRetry(()=>fsMod.setDoc(ref,c,{merge:true}))}
 async function deleteCommunityCloud(code){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/communities/${code}`);await fsRetry(()=>fsMod.deleteDoc(ref))}
@@ -343,3 +360,11 @@ async function compressImageBlob(blob){
     img.src=url;
   });
 }
+function openQRModal(){if(!modalScanQR)return;modalScanQR.classList.remove('hidden');latestScanCode='';latestScanTime=0;if(scanCodeDisplay)scanCodeDisplay.value='';if(scanTimeDisplay)scanTimeDisplay.value='';startModalScan()}
+function closeQRModal(){if(!modalScanQR)return;modalScanQR.classList.add('hidden');stopModalScan()}
+async function startModalScan(){if(!('BarcodeDetector' in window))return;if(!qrCamera)return;const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});qrCamera.srcObject=s;await qrCamera.play();const det=new window.BarcodeDetector({formats:['qr_code']});scanTimer=setInterval(async()=>{try{const r=await det.detect(qrCamera);if(r.length){latestScanCode=r[0].rawValue;latestScanTime=Date.now();if(scanCodeDisplay)scanCodeDisplay.value=latestScanCode;if(scanTimeDisplay)scanTimeDisplay.value=new Date(latestScanTime).toLocaleString();stopModalScan()}}catch(e){}},500)}
+function stopModalScan(){if(qrCamera&&qrCamera.srcObject){qrCamera.srcObject.getTracks().forEach(t=>t.stop());qrCamera.srcObject=null}if(scanTimer){clearInterval(scanTimer);scanTimer=null}}
+async function afterScanConfirm(){if(!latestScanCode)return;const tasks=await getAll('tasks');let found=null;for(const t of tasks){if(Array.isArray(t.pointsDetailed)){for(const p of t.pointsDetailed){if(p.qrCode===latestScanCode||p.pointCode===latestScanCode){found=p;break}}}if(found)break}latestRequirePhoto=!!(found&&found.requirePhoto);latestRequireReport=!!(found&&found.requireReport);latestPointName=found?found.pointName:'';closeQRModal();openPostModal(latestRequireReport,latestRequirePhoto)}
+function openPostModal(showNote,showPhoto){if(!modalPostActions)return;modalPostActions.classList.remove('hidden');if(postNote)postNote.style.display=showNote?'block':'none';if(postPhoto)postPhoto.style.display=showPhoto?'block':'none'}
+function closePostModal(){if(!modalPostActions)return;modalPostActions.classList.add('hidden')}
+async function confirmPost(){const id=uuid();const noteVal=postNote&&postNote.style.display!=='none'?(postNote.value||''):'';const item={id,pointCode:latestScanCode,pointName:latestPointName||'',note:noteVal,createdAt:Date.now(),pending:true,photoId:null};tx('checkins','readwrite').put(item);if(postPhoto&&postPhoto.style.display!=='none'&&postPhoto.files&&postPhoto.files[0]){const phId=uuid();const fr=new FileReader();fr.onload=()=>{tx('photos','readwrite').put({id:phId,checkinId:id,blob:new Blob([fr.result])});tx('checkins','readwrite').put({...item,photoId:phId});renderHistory()};fr.readAsArrayBuffer(postPhoto.files[0])}else{renderHistory()}closePostModal()}

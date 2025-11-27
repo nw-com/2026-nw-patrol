@@ -67,7 +67,6 @@
 
     <section id="tab-scan" class="panel">
       <div class="card">
-        <h2>巡邏</h2>
         <div class="grid">
           <div class="row">
             <button id="btnMainQR" class="btn big">QR code掃描</button>
@@ -166,6 +165,7 @@
           <input id="mAccName" placeholder="姓名">
           <input id="mAccPhone" placeholder="手機號碼">
           <input id="mAccEmail" type="email" placeholder="電子郵件">
+          <input id="mAccPassword" type="password" placeholder="登入密碼">
           <div class="row"><label><input type="checkbox" id="mSelectAllComms"> 全選社區</label></div>
           <div id="mServiceComms" class="checks"></div>
           <button id="btnSaveAccount" class="btn">儲存</button>
@@ -198,6 +198,29 @@
         <div class="row">
           <button id="btnSaveTaskPoints" class="btn">儲存</button>
           <button id="btnCancelTaskPoints" class="btn outline">取消</button>
+        </div>
+      </div>
+    </div>
+    <div id="modalScanQR" class="modal hidden">
+      <div class="dialog">
+        <h3>QR 掃描</h3>
+        <div class="grid">
+          <video id="qrCamera" playsinline></video>
+          <input id="scanCodeDisplay" disabled placeholder="掃描代碼">
+          <input id="scanTimeDisplay" disabled placeholder="掃描時間">
+          <button id="btnScanConfirm" class="btn">確認</button>
+          <button id="btnScanCancel" class="btn outline">取消</button>
+        </div>
+      </div>
+    </div>
+    <div id="modalPostActions" class="modal hidden">
+      <div class="dialog">
+        <h3>後續作業</h3>
+        <div class="grid">
+          <textarea id="postNote" placeholder="輸入回報內容"></textarea>
+          <input id="postPhoto" type="file" accept="image/*" capture="environment">
+          <button id="btnPostConfirm" class="btn">確認</button>
+          <button id="btnPostCancel" class="btn outline">取消</button>
         </div>
       </div>
     </div>
