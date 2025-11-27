@@ -8,6 +8,16 @@ window.addEventListener('online',updateNetwork);
 window.addEventListener('offline',updateNetwork);
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js')}
 
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyA61bz1QAB5wX2cBvhVJ80Pc95swX_XQy8",
+  authDomain: "nw-patrol-2026.firebaseapp.com",
+  projectId: "nw-patrol-2026",
+  storageBucket: "nw-patrol-2026.appspot.com",
+  messagingSenderId: "89933701136",
+  appId: "1:89933701136:web:bfd74540b4575fc2a4ea95",
+  measurementId: "G-2TTZ9018CJ"
+};
+
 let firebaseApp=null, auth=null, firestore=null, storage=null;
 let db=null;
 
@@ -16,8 +26,8 @@ async function loadFirebase(){
   const authMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');
   const fsMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');
   const stMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js');
-  const cfgStr = localStorage.getItem('firebaseConfig');
-  if(!cfgStr) return;
+  let cfgStr = localStorage.getItem('firebaseConfig');
+  if(!cfgStr){cfgStr = JSON.stringify(DEFAULT_FIREBASE_CONFIG); localStorage.setItem('firebaseConfig', cfgStr);} 
   const cfg = JSON.parse(cfgStr);
   firebaseApp = appMod.initializeApp(cfg);
   auth = authMod.getAuth(firebaseApp);
@@ -55,7 +65,7 @@ const btnSaveFirebase = document.getElementById('btnSaveFirebase');
 const btnEnablePersistence = document.getElementById('btnEnablePersistence');
 const btnClearLocal = document.getElementById('btnClearLocal');
 
-btnSaveFirebase.addEventListener('click',async()=>{if(!firebaseConfigJson.value.trim())return;localStorage.setItem('firebaseConfig',firebaseConfigJson.value.trim());await loadFirebase()});
+btnSaveFirebase.addEventListener('click',async()=>{if(!firebaseConfigJson.value.trim())return;localStorage.setItem('firebaseConfig',firebaseConfigJson.value.trim());await loadFirebase();firebaseConfigJson.value=localStorage.getItem('firebaseConfig')||''});
 btnEnablePersistence.addEventListener('click',async()=>{if(!firestore)return;const fsMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');try{await fsMod.enableIndexedDbPersistence(firestore)}catch(e){}});
 btnClearLocal.addEventListener('click',async()=>{indexedDB.deleteDatabase('nw-patrol');location.reload()});
 
@@ -165,4 +175,4 @@ async function syncNow(){if(!auth||!firestore||!storage||!navigator.onLine){sync
 
 btnSync.addEventListener('click',syncNow);
 
-(async()=>{db=await openIDB();await loadFirebase();await refreshAuthState();await renderPoints();await renderHistory()})();
+(async()=>{db=await openIDB();await loadFirebase();firebaseConfigJson.value=localStorage.getItem('firebaseConfig')||'';await refreshAuthState();await renderPoints();await renderHistory()})();
