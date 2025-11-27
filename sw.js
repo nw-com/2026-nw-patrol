@@ -3,7 +3,8 @@ const ASSETS = [
   'index.html',
   'styles.css',
   'app.js',
-  'manifest.webmanifest'
+  'manifest.webmanifest',
+  'logo.svg'
 ];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));

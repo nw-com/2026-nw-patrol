@@ -1,8 +1,11 @@
 const tabs = document.querySelectorAll('.tab');
 const panels = document.querySelectorAll('.panel');
-tabs.forEach(t=>t.addEventListener('click',()=>{tabs.forEach(x=>x.classList.remove('active'));t.classList.add('active');panels.forEach(p=>p.classList.remove('active'));document.getElementById('tab-'+t.dataset.tab).classList.add('active')}));
+const navEl = document.querySelector('nav.tabs');
+function setActiveTab(name){tabs.forEach(x=>x.classList.toggle('active',x.dataset.tab===name));panels.forEach(p=>p.classList.toggle('active',p.id==='tab-'+name))}
+let isAuthed=false;
+tabs.forEach(t=>t.addEventListener('click',()=>{const name=t.dataset.tab;if(!isAuthed&&name!=='login')return;setActiveTab(name)}));
 const networkStatus = document.getElementById('networkStatus');
-function updateNetwork(){networkStatus.textContent=navigator.onLine?'線上':'離線'}
+function updateNetwork(){if(networkStatus)networkStatus.textContent=navigator.onLine?'線上':'離線'}
 updateNetwork();
 window.addEventListener('online',updateNetwork);
 window.addEventListener('offline',updateNetwork);
@@ -59,6 +62,8 @@ const loginEmail = document.getElementById('loginEmail');
 const loginPassword = document.getElementById('loginPassword');
 const btnLogin = document.getElementById('btnLogin');
 const btnSignup = document.getElementById('btnSignup');
+const loginRemember = document.getElementById('loginRemember');
+const togglePassword = document.getElementById('togglePassword');
 const btnGoogle = document.getElementById('btnGoogle');
 const firebaseConfigJson = document.getElementById('firebaseConfigJson');
 const btnSaveFirebase = document.getElementById('btnSaveFirebase');
@@ -70,11 +75,11 @@ btnEnablePersistence.addEventListener('click',async()=>{if(!firestore)return;con
 btnClearLocal.addEventListener('click',async()=>{indexedDB.deleteDatabase('nw-patrol');location.reload()});
 
 btnLogin.addEventListener('click',async()=>{if(!auth)return;const {signInWithEmailAndPassword}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');try{await signInWithEmailAndPassword(auth,loginEmail.value,loginPassword.value)}catch(e){}});
-btnSignup.addEventListener('click',async()=>{if(!auth)return;const {createUserWithEmailAndPassword}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');try{await createUserWithEmailAndPassword(auth,loginEmail.value,loginPassword.value)}catch(e){}});
-btnGoogle.addEventListener('click',async()=>{if(!auth)return;const {GoogleAuthProvider,signInWithPopup}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){}});
+if(btnSignup){btnSignup.addEventListener('click',async()=>{if(!auth)return;const {createUserWithEmailAndPassword}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');try{await createUserWithEmailAndPassword(auth,loginEmail.value,loginPassword.value)}catch(e){}})}
+if(btnGoogle){btnGoogle.addEventListener('click',async()=>{if(!auth)return;const {GoogleAuthProvider,signInWithPopup}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){}})}
 btnLogout.addEventListener('click',async()=>{if(!auth)return;const {signOut}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');await signOut(auth)});
 
-async function refreshAuthState(){if(!auth)return;const {onAuthStateChanged}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');onAuthStateChanged(auth,u=>{userEmail.textContent=u?u.email:''})}
+async function refreshAuthState(){if(!auth)return;const {onAuthStateChanged}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');onAuthStateChanged(auth,u=>{userEmail.textContent=u?u.email:'';isAuthed=!!u;btnLogout.style.display=isAuthed?'inline-block':'none';updateNavVisibility();setActiveTab(isAuthed?'home':'login')})}
 
 const pointName = document.getElementById('pointName');
 const pointCode = document.getElementById('pointCode');
@@ -90,7 +95,7 @@ btnAddPoint.addEventListener('click',async()=>{
 });
 
 async function getAll(store){return new Promise(res=>{const r=tx(store,'readonly').getAll();r.onsuccess=()=>res(r.result)})}
-async function renderPoints(){const items=await getAll('points');pointsList.innerHTML='';items.forEach(p=>{const el=document.createElement('div');el.className='item';el.innerHTML=`<div><strong>${p.name}</strong><br><span>${p.code}</span></div><button data-code="${p.code}" class="btn outline">刪除</button>`;el.querySelector('button').addEventListener('click',()=>{tx('points','readwrite').delete(p.code);renderPoints()});pointsList.appendChild(el)})}
+async function renderPoints(){const items=await getAll('points');pointsList.innerHTML='';items.forEach(p=>{const el=document.createElement('div');el.className='item';el.innerHTML=`<div><strong>${p.name}</strong><br><span>${p.code}</span></div><button data-code="${p.code}" class="btn outline">刪除</button>`;el.querySelector('button').addEventListener('click',()=>{tx('points','readwrite').delete(p.code);renderPoints()});pointsList.appendChild(el)});updateHome()}
 
 const camera = document.getElementById('camera');
 const btnStartScan = document.getElementById('btnStartScan');
@@ -154,7 +159,7 @@ const historyList = document.getElementById('historyList');
 const btnSync = document.getElementById('btnSync');
 const syncStatus = document.getElementById('syncStatus');
 
-async function renderHistory(){const items=await getAll('checkins');historyList.innerHTML='';items.sort((a,b)=>b.createdAt-a.createdAt).forEach(c=>{const el=document.createElement('div');el.className='item';const d=new Date(c.createdAt);el.innerHTML=`<div><strong>${c.pointName||c.pointCode}</strong><br><span>${d.toLocaleString()} • ${c.note||''}</span></div><span>${c.pending?'待同步':'已同步'}</span>`;historyList.appendChild(el)})}
+async function renderHistory(){const items=await getAll('checkins');historyList.innerHTML='';items.sort((a,b)=>b.createdAt-a.createdAt).forEach(c=>{const el=document.createElement('div');el.className='item';const d=new Date(c.createdAt);el.innerHTML=`<div><strong>${c.pointName||c.pointCode}</strong><br><span>${d.toLocaleString()} • ${c.note||''}</span></div><span>${c.pending?'待同步':'已同步'}</span>`;historyList.appendChild(el)});updateHome()}
 
 async function syncNow(){if(!auth||!firestore||!storage||!navigator.onLine){syncStatus.textContent='無法同步';return}
   syncStatus.textContent='同步中';
@@ -175,4 +180,31 @@ async function syncNow(){if(!auth||!firestore||!storage||!navigator.onLine){sync
 
 btnSync.addEventListener('click',syncNow);
 
-(async()=>{db=await openIDB();await loadFirebase();firebaseConfigJson.value=localStorage.getItem('firebaseConfig')||'';await refreshAuthState();await renderPoints();await renderHistory()})();
+const tabLogin=document.querySelector('[data-tab="login"]');
+const tabHome=document.querySelector('[data-tab="home"]');
+const tabScan=document.querySelector('[data-tab="scan"]');
+const tabPoints=document.querySelector('[data-tab="points"]');
+const tabHistory=document.querySelector('[data-tab="history"]');
+const tabSettings=document.querySelector('[data-tab="settings"]');
+function updateNavVisibility(){if(navEl)navEl.style.display=isAuthed?'flex':'none';tabLogin.style.display=isAuthed?'none':'inline-block';tabHome.style.display=isAuthed?'inline-block':'none';tabScan.style.display=isAuthed?'inline-block':'none';tabPoints.style.display=isAuthed?'inline-block':'none';tabHistory.style.display=isAuthed?'inline-block':'none';tabSettings.style.display='inline-block'}
+
+const goScan=document.getElementById('goScan');
+const goPoints=document.getElementById('goPoints');
+const goHistory=document.getElementById('goHistory');
+const btnQuickSync=document.getElementById('btnQuickSync');
+if(goScan)goScan.addEventListener('click',()=>setActiveTab('scan'));
+if(goPoints)goPoints.addEventListener('click',()=>setActiveTab('points'));
+if(goHistory)goHistory.addEventListener('click',()=>setActiveTab('history'));
+if(btnQuickSync)btnQuickSync.addEventListener('click',syncNow);
+
+const homePointsCount=document.getElementById('homePointsCount');
+const homeCheckinsCount=document.getElementById('homeCheckinsCount');
+const homePendingCount=document.getElementById('homePendingCount');
+async function updateHome(){const pts=await getAll('points');const ch=await getAll('checkins');const pend=ch.filter(x=>x.pending).length;if(homePointsCount)homePointsCount.textContent=String(pts.length);if(homeCheckinsCount)homeCheckinsCount.textContent=String(ch.length);if(homePendingCount)homePendingCount.textContent=String(pend)}
+
+(async()=>{db=await openIDB();await loadFirebase();firebaseConfigJson.value=localStorage.getItem('firebaseConfig')||'';await refreshAuthState();updateNavVisibility();await renderPoints();await renderHistory();setActiveTab('login')})();
+
+if(togglePassword){togglePassword.addEventListener('click',()=>{loginPassword.type=loginPassword.type==='password'?'text':'password'})}
+const savedEmail=localStorage.getItem('rememberEmail')||'';if(savedEmail){loginEmail.value=savedEmail;if(loginRemember)loginRemember.checked=true}
+if(loginRemember){loginRemember.addEventListener('change',()=>{if(loginRemember.checked){localStorage.setItem('rememberEmail',loginEmail.value||'')}else{localStorage.removeItem('rememberEmail')}})}
+if(btnLogin){btnLogin.addEventListener('click',()=>{if(loginRemember&&loginRemember.checked){localStorage.setItem('rememberEmail',loginEmail.value||'')}})}
