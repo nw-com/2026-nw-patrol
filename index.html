@@ -23,8 +23,7 @@
   <nav class="tabs">
     <button data-tab="login" class="tab active">登入</button>
     <button data-tab="home" class="tab">首頁</button>
-    <button data-tab="scan" class="tab">掃描</button>
-    <button data-tab="points" class="tab">巡邏點</button>
+    <button data-tab="scan" class="tab">巡邏</button>
     <button data-tab="history" class="tab">記錄</button>
     <button data-tab="settings" class="tab">設定</button>
   </nav>
@@ -57,19 +56,6 @@
 
     <section id="tab-home" class="panel">
       <div class="card">
-        <h2>首頁</h2>
-        <div class="grid">
-          <div class="row">
-            <button id="goScan" class="btn">前往掃描</button>
-            <button id="goPoints" class="btn ghost">管理巡邏點</button>
-            <button id="goHistory" class="btn outline">查看記錄</button>
-          </div>
-          <div class="row">
-            <button id="btnQuickSync" class="btn">立即同步</button>
-          </div>
-        </div>
-      </div>
-      <div class="card">
         <h2>概況</h2>
         <div class="list">
           <div class="item"><span>巡邏點數</span><strong id="homePointsCount">0</strong></div>
@@ -81,55 +67,20 @@
 
     <section id="tab-scan" class="panel">
       <div class="card">
-        <h2>掃描 QR / NFC</h2>
+        <h2>巡邏</h2>
         <div class="grid">
-          <video id="camera" playsinline></video>
           <div class="row">
-            <button id="btnStartScan" class="btn">啟動相機掃描</button>
-            <button id="btnStopScan" class="btn outline">停止</button>
+            <button id="btnMainQR" class="btn big">QR code掃描</button>
           </div>
           <div class="row">
-            <button id="btnStartNFC" class="btn ghost">啟動 NFC</button>
+            <button id="btnMainNFC" class="btn big">NFC感應</button>
           </div>
-          <input id="manualCode" placeholder="手動輸入巡邏點代碼">
-          <button id="btnUseCode" class="btn">使用代碼</button>
         </div>
-      </div>
-
-      <div class="card">
-        <h2>打卡與拍照</h2>
-        <div class="grid">
-          <input id="currentPointName" disabled placeholder="巡邏點">
-          <textarea id="taskNote" placeholder="任務執行紀錄"></textarea>
-          <input id="photoInput" type="file" accept="image/*" capture="environment">
-          <button id="btnCheckin" class="btn">打卡</button>
-        </div>
-        <p id="scanStatus" class="status"></p>
       </div>
     </section>
 
-    <section id="tab-points" class="panel">
-      <div class="card">
-        <h2>巡邏點管理</h2>
-        <div class="grid">
-          <input id="pointName" placeholder="名稱">
-          <input id="pointCode" placeholder="QR/NFC 代碼">
-          <button id="btnAddPoint" class="btn">新增巡邏點</button>
-        </div>
-        <div class="list" id="pointsList"></div>
-      </div>
-    </section>
 
-    <section id="tab-history" class="panel">
-      <div class="card">
-        <h2>打卡記錄</h2>
-        <div class="toolbar">
-          <button id="btnSync" class="btn">同步到雲端</button>
-          <span id="syncStatus" class="status"></span>
-        </div>
-        <div class="list" id="historyList"></div>
-      </div>
-    </section>
+    <section id="tab-history" class="panel"></section>
 
     <section id="tab-settings" class="panel">
       <div class="card">

@@ -24,6 +24,7 @@ textarea{min-height:100px}
 .input-wrap input{padding-left:40px}
 .input-wrap .input-action{position:absolute;right:10px;top:50%;transform:translateY(-50%);appearance:none;border:0;background:transparent;color:var(--muted);cursor:pointer;padding:0}
 .btn{appearance:none;border:0;background:var(--primary);color:#fff;padding:10px 14px;border-radius:8px;cursor:pointer}
+.btn.big{padding:18px 20px;font-size:18px;width:100%}
 .btn:hover{background:var(--primary-600)}
 .btn.outline{background:transparent;color:var(--primary);border:1px solid var(--primary)}
 .btn.ghost{background:#eee;color:#333}
@@ -38,6 +39,8 @@ textarea{min-height:100px}
 .list.head{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;padding:10px;border:1px solid #eee;border-radius:8px;background:#f8f9fa;font-weight:600;color:#555}
 .list.head .col{white-space:nowrap}
 .table{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+.table .list{width:max-content}
+.table .list .item>div{white-space:nowrap}
 .communities-table .list.head,.communities-table .list .item{display:grid;grid-template-columns:150px 240px 120px 160px;gap:8px;align-items:center}
 .accounts-table .list.head,.accounts-table .list .item{display:grid;grid-template-columns:120px 160px 140px 220px 240px 160px;gap:8px;align-items:center}
 .tasks-table .list.head,.tasks-table .list .item{display:grid;grid-template-columns:140px 200px 160px 200px 120px 200px 140px 160px;gap:8px;align-items:center;justify-items:start}

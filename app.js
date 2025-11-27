@@ -10,6 +10,8 @@ updateNetwork();
 window.addEventListener('online',updateNetwork);
 window.addEventListener('offline',updateNetwork);
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js')}
+window.addEventListener('online',async()=>{try{if(firestore){const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');try{await fsMod.enableNetwork(firestore)}catch(e){}}if(auth&&isAuthed){await syncCommunitiesFromCloud();await syncAccountsFromCloud();await syncTasksFromCloud();renderCommunities();renderAccounts();renderTasks()}}catch(e){}})
+window.addEventListener('offline',async()=>{try{if(firestore){const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');try{await fsMod.disableNetwork(firestore)}catch(e){}}}catch(e){}})
 
 const DEFAULT_FIREBASE_CONFIG = {
   apiKey: "AIzaSyA61bz1QAB5wX2cBvhVJ80Pc95swX_XQy8",
@@ -57,6 +59,7 @@ async function openIDB(){
 
 function tx(store,mode){return db.transaction(store,mode).objectStore(store)}
 function uuid(){return 'id-'+Math.random().toString(36).slice(2)+Date.now()}
+async function fsRetry(op){let i=0;let last=null;while(i<3){try{return await op()}catch(e){last=e;i++;await new Promise(r=>setTimeout(r,500))}}return null}
 
 const userEmail = document.getElementById('userEmail');
 const btnLogout = document.getElementById('btnLogout');
@@ -88,18 +91,19 @@ const pointCode = document.getElementById('pointCode');
 const btnAddPoint = document.getElementById('btnAddPoint');
 const pointsList = document.getElementById('pointsList');
 
-btnAddPoint.addEventListener('click',async()=>{
-  if(!pointName.value||!pointCode.value)return;
+if(btnAddPoint){btnAddPoint.addEventListener('click',async()=>{
+  if(!pointName||!pointCode||!pointName.value||!pointCode.value)return;
   const store = tx('points','readwrite');
   store.put({code:pointCode.value,name:pointName.value,updatedAt:Date.now()});
   renderPoints();
   pointName.value='';pointCode.value='';
-});
+})}
 
 async function getAll(store){return new Promise(res=>{const r=tx(store,'readonly').getAll();r.onsuccess=()=>res(r.result)})}
-async function renderPoints(){const items=await getAll('points');pointsList.innerHTML='';items.forEach(p=>{const el=document.createElement('div');el.className='item';el.innerHTML=`<div><strong>${p.name}</strong><br><span>${p.code}</span></div><button data-code="${p.code}" class="btn outline">刪除</button>`;el.querySelector('button').addEventListener('click',()=>{tx('points','readwrite').delete(p.code);renderPoints()});pointsList.appendChild(el)});updateHome()}
+async function renderPoints(){const items=await getAll('points');if(!pointsList){updateHome();return}pointsList.innerHTML='';items.forEach(p=>{const el=document.createElement('div');el.className='item';el.innerHTML=`<div><strong>${p.name}</strong><br><span>${p.code}</span></div><button data-code="${p.code}" class="btn outline">刪除</button>`;el.querySelector('button').addEventListener('click',()=>{tx('points','readwrite').delete(p.code);renderPoints()});pointsList.appendChild(el)});updateHome()}
 
-const camera = document.getElementById('camera');
+let camera = document.getElementById('camera');
+
 const btnStartScan = document.getElementById('btnStartScan');
 const btnStopScan = document.getElementById('btnStopScan');
 const btnStartNFC = document.getElementById('btnStartNFC');
@@ -110,11 +114,14 @@ const taskNote = document.getElementById('taskNote');
 const photoInput = document.getElementById('photoInput');
 const btnCheckin = document.getElementById('btnCheckin');
 const scanStatus = document.getElementById('scanStatus');
+const btnMainQR = document.getElementById('btnMainQR');
+const btnMainNFC = document.getElementById('btnMainNFC');
 
 let mediaStream=null, scanTimer=null, currentPoint=null;
 
 async function startScan(){
   if(!('BarcodeDetector' in window))return;
+  if(!camera){const v=document.createElement('video');v.id='camera';v.playsInline=true;v.style.display='none';document.body.appendChild(v);camera=v}
   mediaStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
   camera.srcObject=mediaStream;
   await camera.play();
@@ -144,10 +151,12 @@ async function startNFC(){
 
 async function useCode(code){if(!code)return;const p=(await getAll('points')).find(x=>x.code===code);currentPoint=p||{code,name:'未知點位'};currentPointName.value=currentPoint.name;scanStatus.textContent=`已識別代碼 ${code}`}
 
-btnStartScan.addEventListener('click',startScan);
-btnStopScan.addEventListener('click',stopScan);
-btnStartNFC.addEventListener('click',startNFC);
-btnUseCode.addEventListener('click',()=>useCode(manualCode.value));
+if(btnStartScan){btnStartScan.addEventListener('click',startScan)}
+if(btnStopScan){btnStopScan.addEventListener('click',stopScan)}
+if(btnStartNFC){btnStartNFC.addEventListener('click',startNFC)}
+if(btnUseCode){btnUseCode.addEventListener('click',()=>useCode(manualCode.value))}
+if(btnMainQR){btnMainQR.addEventListener('click',startScan)}
+if(btnMainNFC){btnMainNFC.addEventListener('click',startNFC)}
 
 btnCheckin.addEventListener('click',async()=>{
   const id=uuid();
@@ -161,10 +170,10 @@ const historyList = document.getElementById('historyList');
 const btnSync = document.getElementById('btnSync');
 const syncStatus = document.getElementById('syncStatus');
 
-async function renderHistory(){const items=await getAll('checkins');historyList.innerHTML='';items.sort((a,b)=>b.createdAt-a.createdAt).forEach(c=>{const el=document.createElement('div');el.className='item';const d=new Date(c.createdAt);el.innerHTML=`<div><strong>${c.pointName||c.pointCode}</strong><br><span>${d.toLocaleString()} • ${c.note||''}</span></div><span>${c.pending?'待同步':'已同步'}</span>`;historyList.appendChild(el)});updateHome()}
+async function renderHistory(){const items=await getAll('checkins');if(!historyList){updateHome();return}historyList.innerHTML='';items.sort((a,b)=>b.createdAt-a.createdAt).forEach(c=>{const el=document.createElement('div');el.className='item';const d=new Date(c.createdAt);el.innerHTML=`<div><strong>${c.pointName||c.pointCode}</strong><br><span>${d.toLocaleString()} • ${c.note||''}</span></div><span>${c.pending?'待同步':'已同步'}</span>`;historyList.appendChild(el)});updateHome()}
 
-async function syncNow(){if(!auth||!firestore||!navigator.onLine){syncStatus.textContent='無法同步';return}
-  syncStatus.textContent='同步中';
+async function syncNow(){if(!auth||!firestore||!navigator.onLine){if(syncStatus)syncStatus.textContent='無法同步';return}
+  if(syncStatus)syncStatus.textContent='同步中';
   const fsMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');
   const user = auth.currentUser; if(!user){syncStatus.textContent='請先登入';return}
   const pending = (await getAll('checkins')).filter(x=>x.pending);
@@ -172,14 +181,14 @@ async function syncNow(){if(!auth||!firestore||!navigator.onLine){syncStatus.tex
     let photoData='';
     if(c.photoId){const phReq=tx('photos','readonly').get(c.photoId);await new Promise(r=>phReq.onsuccess=r);const rec=phReq.result;if(rec&&rec.blob){photoData=await compressImageBlob(rec.blob)}}
     const docRef = fsMod.doc(firestore,`orgs/default/checkins/${c.id}`);
-    await fsMod.setDoc(docRef,{userId:user.uid,pointCode:c.pointCode,pointName:c.pointName,note:c.note,createdAt:c.createdAt,photoData});
+    await fsRetry(()=>fsMod.setDoc(docRef,{userId:user.uid,pointCode:c.pointCode,pointName:c.pointName,note:c.note,createdAt:c.createdAt,photoData}));
     tx('checkins','readwrite').put({...c,pending:false});
   }
   renderHistory();
-  syncStatus.textContent='同步完成'
+  if(syncStatus)syncStatus.textContent='同步完成'
 }
 
-btnSync.addEventListener('click',syncNow);
+if(btnSync){btnSync.addEventListener('click',syncNow)}
 
 const tabLogin=document.querySelector('[data-tab="login"]');
 const tabHome=document.querySelector('[data-tab="home"]');
@@ -187,7 +196,15 @@ const tabScan=document.querySelector('[data-tab="scan"]');
 const tabPoints=document.querySelector('[data-tab="points"]');
 const tabHistory=document.querySelector('[data-tab="history"]');
 const tabSettings=document.querySelector('[data-tab="settings"]');
-function updateNavVisibility(){if(navEl)navEl.style.display=isAuthed?'flex':'none';tabLogin.style.display=isAuthed?'none':'inline-block';tabHome.style.display=isAuthed?'inline-block':'none';tabScan.style.display=isAuthed?'inline-block':'none';tabPoints.style.display=isAuthed?'inline-block':'none';tabHistory.style.display=isAuthed?'inline-block':'none';tabSettings.style.display='inline-block'}
+function updateNavVisibility(){
+  if(navEl)navEl.style.display=isAuthed?'flex':'none';
+  if(tabLogin)tabLogin.style.display=isAuthed?'none':'inline-block';
+  if(tabHome)tabHome.style.display=isAuthed?'inline-block':'none';
+  if(tabScan)tabScan.style.display=isAuthed?'inline-block':'none';
+  if(tabPoints)tabPoints.style.display=isAuthed?'inline-block':'none';
+  if(tabHistory)tabHistory.style.display=isAuthed?'inline-block':'none';
+  if(tabSettings)tabSettings.style.display='inline-block';
+}
 
 const goScan=document.getElementById('goScan');
 const goPoints=document.getElementById('goPoints');
@@ -265,20 +282,20 @@ if(btnOpenAccount){btnOpenAccount.addEventListener('click',()=>openAccountModal(
 if(btnCancelAccount){btnCancelAccount.addEventListener('click',closeAccountModal)}
 if(btnSaveAccount){btnSaveAccount.addEventListener('click',()=>{const id=modalAccount.dataset.mode==='edit'?modalAccount.dataset.id:uuid();const selected=[];mServiceComms.querySelectorAll('input[type="checkbox"]:checked').forEach(b=>selected.push(b.value));const item={id,role:mAccRole.value.trim(),name:mAccName.value.trim(),phone:mAccPhone.value.trim(),email:mAccEmail.value.trim(),serviceCommunities:selected,updatedAt:Date.now()};if(!item.role||!item.name||!item.phone||!item.email)return;tx('accounts','readwrite').put(item).onsuccess=()=>{closeAccountModal();upsertAccountCloud(item);renderAccounts()}})}
 
-async function upsertCommunityCloud(c){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/communities/${c.code}`);await fsMod.setDoc(ref,c,{merge:true})}
-async function deleteCommunityCloud(code){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/communities/${code}`);await fsMod.deleteDoc(ref)}
-async function syncCommunitiesFromCloud(){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const col=fsMod.collection(firestore,'orgs/default/communities');const snap=await fsMod.getDocs(col);const store=tx('communities','readwrite');snap.forEach(d=>{store.put({...d.data()})})}
+async function upsertCommunityCloud(c){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/communities/${c.code}`);await fsRetry(()=>fsMod.setDoc(ref,c,{merge:true}))}
+async function deleteCommunityCloud(code){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/communities/${code}`);await fsRetry(()=>fsMod.deleteDoc(ref))}
+async function syncCommunitiesFromCloud(){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const col=fsMod.collection(firestore,'orgs/default/communities');const snap=await fsRetry(()=>fsMod.getDocs(col));if(!snap||typeof snap.forEach!=='function')return;const store=tx('communities','readwrite');snap.forEach(d=>{store.put({...d.data()})});const locals=await getAll('communities');for(const c of locals){await upsertCommunityCloud(c)}}
 
-async function upsertAccountCloud(a){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/accounts/${a.id}`);await fsMod.setDoc(ref,a,{merge:true})}
-async function deleteAccountCloud(id){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/accounts/${id}`);await fsMod.deleteDoc(ref)}
-async function syncAccountsFromCloud(){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const col=fsMod.collection(firestore,'orgs/default/accounts');const snap=await fsMod.getDocs(col);const store=tx('accounts','readwrite');snap.forEach(d=>{store.put({...d.data()})})}
+async function upsertAccountCloud(a){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/accounts/${a.id}`);await fsRetry(()=>fsMod.setDoc(ref,a,{merge:true}))}
+async function deleteAccountCloud(id){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/accounts/${id}`);await fsRetry(()=>fsMod.deleteDoc(ref))}
+async function syncAccountsFromCloud(){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const col=fsMod.collection(firestore,'orgs/default/accounts');const snap=await fsRetry(()=>fsMod.getDocs(col));if(!snap||typeof snap.forEach!=='function')return;const store=tx('accounts','readwrite');snap.forEach(d=>{store.put({...d.data()})});const locals=await getAll('accounts');for(const a of locals){await upsertAccountCloud(a)}}
 
 function openTaskModal(mode,data){modalTask.classList.remove('hidden');modalTask.dataset.mode=mode||'create';modalTask.dataset.code=data?data.code:'';mTaskName.value=data?data.name||'':'';mTaskTimeStart.value=data?data.timeStart||'':'';mTaskTimeEnd.value=data?data.timeEnd||'':'';mTaskAllWeek.checked=!!(data&&data.allWeek);buildTaskDays(data&&data.days||[]);mTaskPointCount.value=data?String(data.pointCount||1):'';btnOpenTaskPoints.textContent=`巡邏點(${mTaskPointCount.value?mTaskPointCount.value:0})`;mTaskCode.disabled=mode==='edit';buildTaskCommunities().then(()=>{if(data){mTaskCommunity.value=data.communityCode;mTaskCode.value=data.code;editingTaskPoints=data.pointsDetailed||[]}else{const first=mTaskCommunity.querySelector('option');if(first){mTaskCommunity.value=first.value;mTaskCode.value=''}editingTaskPoints=[]}if(!data){updateTaskCode()}})}
 function closeTaskModal(){modalTask.classList.add('hidden')}
 async function buildTaskCommunities(){mTaskCommunity.innerHTML='';const items=await getAll('communities');items.forEach(c=>{const o=document.createElement('option');o.value=c.code;o.textContent=c.name;mTaskCommunity.appendChild(o)});mTaskCommunity.onchange=()=>{if(modalTask.dataset.mode!=='edit'){updateTaskCode()}}}
 async function updateTaskCode(){const code=mTaskCommunity.value;if(!code){mTaskCode.value='';return}const next=await nextTaskCode(code);mTaskCode.value=next}
 async function nextTaskCode(commCode){const items=await getAll('tasks');const list=items.filter(x=>x.communityCode===commCode);let max=0;list.forEach(t=>{const m=t.code.split('-').pop();const n=parseInt(m,10);if(!isNaN(n)&&n>max)max=n});const num=String(max+1).padStart(2,'0');return `${commCode}-${num}`}
-async function renderTasks(){if(!tasksList)return;const items=await getAll('tasks');tasksList.innerHTML='';items.forEach(t=>{const freq=t.allWeek?'整週':(Array.isArray(t.days)?t.days.map(d=>['週一','週二','週三','週四','週五','週六','週日'][d-1]).join(','):'');const timeStr=t.time?t.time:((t.timeStart&&t.timeEnd)?`${t.timeStart}~${t.timeEnd}`:'');const el=document.createElement('div');el.className='item';const ptsCount=Array.isArray(t.pointsDetailed)?t.pointsDetailed.length:(t.pointCount||0);el.innerHTML=`<div>${t.communityCode}</div><div>${t.communityName||''}</div><div>${t.code}</div><div>${t.name||''}</div><div>${timeStr}</div><div>${freq}</div><div><button class=\"btn\" data-act=\"points\" data-code=\"${t.code}\">巡邏點(${ptsCount})</button></div><div><button class=\"btn\" data-act=\"edit\" data-code=\"${t.code}\">編輯</button> <button class=\"btn outline\" data-act=\"del\" data-code=\"${t.code}\">刪除</button></div>`;el.querySelector('[data-act=\"points\"]').addEventListener('click',()=>{openPointsModal(t)});el.querySelector('[data-act=\"edit\"]').addEventListener('click',()=>openTaskModal('edit',t));el.querySelector('[data-act=\"del\"]').addEventListener('click',()=>{if(!confirm(`確定要刪除任務 ${t.name||t.code}？`))return;tx('tasks','readwrite').delete(t.code).onsuccess=()=>{deleteTaskCloud(t.code);renderTasks()}});tasksList.appendChild(el)})}
+async function renderTasks(){if(!tasksList)return;const items=await getAll('tasks');tasksList.innerHTML='';items.forEach(t=>{const freq=t.allWeek?'整週':(Array.isArray(t.days)?t.days.map(d=>['週一','週二','週三','週四','週五','週六','週日'][d-1]).join(','):'');const timeStr=t.time?t.time:((t.timeStart&&t.timeEnd)?`${t.timeStart}~${t.timeEnd}`:'');const el=document.createElement('div');el.className='item';const ptsCount=(Array.isArray(t.pointsDetailed)&&t.pointsDetailed.length>0)?t.pointsDetailed.length:(t.pointCount||0);el.innerHTML=`<div>${t.communityCode}</div><div>${t.communityName||''}</div><div>${t.code}</div><div>${t.name||''}</div><div>${timeStr}</div><div>${freq}</div><div><button class=\"btn\" data-act=\"points\" data-code=\"${t.code}\">巡邏點(${ptsCount})</button></div><div><button class=\"btn\" data-act=\"edit\" data-code=\"${t.code}\">編輯</button> <button class=\"btn outline\" data-act=\"del\" data-code=\"${t.code}\">刪除</button></div>`;el.querySelector('[data-act=\"points\"]').addEventListener('click',()=>{openPointsModal(t)});el.querySelector('[data-act=\"edit\"]').addEventListener('click',()=>openTaskModal('edit',t));el.querySelector('[data-act=\"del\"]').addEventListener('click',()=>{if(!confirm(`確定要刪除任務 ${t.name||t.code}？`))return;tx('tasks','readwrite').delete(t.code).onsuccess=()=>{deleteTaskCloud(t.code);renderTasks()}});tasksList.appendChild(el)})}
 if(btnOpenTask){btnOpenTask.addEventListener('click',()=>openTaskModal('create'))}
 if(btnCancelTask){btnCancelTask.addEventListener('click',closeTaskModal)}
 if(btnSaveTask){btnSaveTask.addEventListener('click',()=>{const mode=modalTask.dataset.mode||'create';const commCode=mTaskCommunity.value;const commName=mTaskCommunity.options[mTaskCommunity.selectedIndex]?.textContent||'';const code=mode==='edit'?(modalTask.dataset.code||mTaskCode.value):mTaskCode.value;const name=mTaskName.value.trim();const pc=parseInt(mTaskPointCount.value,10);const timeStart=mTaskTimeStart.value||'';const timeEnd=mTaskTimeEnd.value||'';const allWeek=mTaskAllWeek.checked;const days=[];mTaskDays.querySelectorAll('input[type="checkbox"]:checked').forEach(b=>days.push(parseInt(b.value,10)));if(allWeek&&days.length!==7){days.length=0;for(let i=1;i<=7;i++)days.push(i)}if(!commCode||!code||!pc||pc<1)return;if(!timeStart||!timeEnd)return;const item={code,communityCode:commCode,communityName:commName,name,pointCount:pc,timeStart,timeEnd,allWeek,days,pointsDetailed:editingTaskPoints,updatedAt:Date.now()};tx('tasks','readwrite').put(item).onsuccess=()=>{closeTaskModal();upsertTaskCloud(item);renderTasks()}})}
@@ -294,9 +311,9 @@ if(mTaskPointCount){mTaskPointCount.addEventListener('input',()=>{btnOpenTaskPoi
 if(btnCancelTaskPoints){btnCancelTaskPoints.addEventListener('click',closePointsModal)}
 if(btnSaveTaskPoints){btnSaveTaskPoints.addEventListener('click',()=>{const blocks=taskPointsContainer.querySelectorAll('.point-block');const code=modalTaskPoints.dataset.code||'';const built=Array.from(blocks).map((el,idx)=>({qrCode:el.querySelector('.qr').value.trim()||`${code||mTaskCode.value}-${String(idx+1).padStart(3,'0')}`,pointCode:el.querySelector('.pcode').value.trim()||`${code||mTaskCode.value}-${String(idx+1).padStart(3,'0')}`,pointName:el.querySelector('.pname').value.trim(),focus:el.querySelector('.focus').value.trim(),requireReport:el.querySelector('.report').checked,requirePhoto:el.querySelector('.photo').checked}));if(!modalTask.classList.contains('hidden')){editingTaskPoints=built}else{const r=tx('tasks','readonly').get(code);r.onsuccess=()=>{const ex=r.result;if(ex){const item={...ex,pointsDetailed:built,pointCount:built.length,updatedAt:Date.now()};tx('tasks','readwrite').put(item).onsuccess=()=>{upsertTaskCloud(item);renderTasks()}}}}closePointsModal()})}
 
-async function upsertTaskCloud(t){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/tasks/${t.code}`);await fsMod.setDoc(ref,t,{merge:true})}
-async function deleteTaskCloud(code){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/tasks/${code}`);await fsMod.deleteDoc(ref)}
-async function syncTasksFromCloud(){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const col=fsMod.collection(firestore,'orgs/default/tasks');const snap=await fsMod.getDocs(col);const store=tx('tasks','readwrite');snap.forEach(d=>{store.put({...d.data()})})}
+async function upsertTaskCloud(t){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/tasks/${t.code}`);await fsRetry(()=>fsMod.setDoc(ref,t,{merge:true}))}
+async function deleteTaskCloud(code){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/tasks/${code}`);await fsRetry(()=>fsMod.deleteDoc(ref))}
+async function syncTasksFromCloud(){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const col=fsMod.collection(firestore,'orgs/default/tasks');const snap=await fsRetry(()=>fsMod.getDocs(col));if(!snap||typeof snap.forEach!=='function')return;const store=tx('tasks','readwrite');snap.forEach(d=>{store.put({...d.data()})});const locals=await getAll('tasks');for(const t of locals){await upsertTaskCloud(t)}}
 
 if(togglePassword){togglePassword.addEventListener('click',()=>{loginPassword.type=loginPassword.type==='password'?'text':'password'})}
 const savedEmail=localStorage.getItem('rememberEmail')||'';if(savedEmail){loginEmail.value=savedEmail;if(loginRemember)loginRemember.checked=true}
