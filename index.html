@@ -164,6 +164,25 @@
           <div class="list" id="communitiesList"></div>
         </div>
       </div>
+      <div class="card">
+        <h2>巡邏任務列表</h2>
+        <div class="toolbar">
+          <button id="btnOpenTask" class="btn">新增任務</button>
+        </div>
+        <div class="table tasks-table">
+          <div class="list head" id="tasksHead">
+            <div class="col">社區代號</div>
+            <div class="col">社區名稱</div>
+            <div class="col">巡邏任務代號</div>
+            <div class="col">巡邏任務名稱</div>
+            <div class="col">任務時間</div>
+            <div class="col">頻率</div>
+            <div class="col">巡邏點</div>
+            <div class="col">操作</div>
+          </div>
+          <div class="list" id="tasksList"></div>
+        </div>
+      </div>
     </section>
 
     <div id="modalCommunity" class="modal hidden">
@@ -200,6 +219,34 @@
           <div id="mServiceComms" class="checks"></div>
           <button id="btnSaveAccount" class="btn">儲存</button>
           <button id="btnCancelAccount" class="btn outline">取消</button>
+        </div>
+      </div>
+    </div>
+    <div id="modalTask" class="modal hidden">
+      <div class="dialog">
+        <h3>巡邏任務</h3>
+        <div class="grid">
+          <select id="mTaskCommunity"></select>
+          <input id="mTaskCode" placeholder="巡邏任務代號">
+          <input id="mTaskName" placeholder="巡邏任務名稱">
+          <input id="mTaskTimeStart" type="time" placeholder="開始時間">
+          <input id="mTaskTimeEnd" type="time" placeholder="結束時間">
+          <div class="row"><label><input type="checkbox" id="mTaskAllWeek"> 整週</label></div>
+          <div class="checks" id="mTaskDays"></div>
+          <input id="mTaskPointCount" type="number" min="1" placeholder="巡邏點數量">
+          <div class="row"><button id="btnOpenTaskPoints" class="btn">巡邏點(0)</button></div>
+          <button id="btnSaveTask" class="btn">儲存</button>
+          <button id="btnCancelTask" class="btn outline">取消</button>
+        </div>
+      </div>
+    </div>
+    <div id="modalTaskPoints" class="modal hidden">
+      <div class="dialog">
+        <h3>巡邏點</h3>
+        <div id="taskPointsContainer" class="list"></div>
+        <div class="row">
+          <button id="btnSaveTaskPoints" class="btn">儲存</button>
+          <button id="btnCancelTaskPoints" class="btn outline">取消</button>
         </div>
       </div>
     </div>

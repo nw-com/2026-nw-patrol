@@ -37,13 +37,20 @@ textarea{min-height:100px}
 .dialog .row{display:flex;justify-content:flex-start}
 .list.head{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;padding:10px;border:1px solid #eee;border-radius:8px;background:#f8f9fa;font-weight:600;color:#555}
 .list.head .col{white-space:nowrap}
-.table{overflow-x:auto}
+.table{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
 .communities-table .list.head,.communities-table .list .item{display:grid;grid-template-columns:150px 240px 120px 160px;gap:8px;align-items:center}
 .accounts-table .list.head,.accounts-table .list .item{display:grid;grid-template-columns:120px 160px 140px 220px 240px 160px;gap:8px;align-items:center}
+.tasks-table .list.head,.tasks-table .list .item{display:grid;grid-template-columns:140px 200px 160px 200px 120px 200px 140px 160px;gap:8px;align-items:center;justify-items:start}
+.accounts-table .list.head,.accounts-table .list .item{justify-items:start}
+.communities-table .list.head,.communities-table .list .item{justify-items:start}
+.table .list.head .col,.table .list .item > div{text-align:left}
+.tasks-table .list .item > div,.tasks-table .list.head .col{text-align:left}
+.point-block{display:grid;gap:8px;padding:10px;border:1px solid #eee;border-radius:8px;background:#fff}
+.freq{display:flex;gap:8px;flex-wrap:wrap}
 .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:8px}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:1000}
 .modal.hidden{display:none}
-.dialog{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:16px;max-width:560px;width:90%}
+.dialog{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:16px;max-width:560px;width:90%;max-height:90vh;overflow:auto}
 .dialog h3{margin:0 0 12px;color:var(--primary)}
 .btn#btnLogout{background:#c1121f;color:#fff;border-color:#c1121f;white-space:nowrap}
 .status{color:var(--muted);font-size:12px}
