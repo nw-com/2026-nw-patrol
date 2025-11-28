@@ -3,7 +3,7 @@ const panels = document.querySelectorAll('.panel');
 const navEl = document.querySelector('nav.tabs');
 function setActiveTab(name){tabs.forEach(x=>x.classList.toggle('active',x.dataset.tab===name));panels.forEach(p=>p.classList.toggle('active',p.id==='tab-'+name))}
 let isAuthed=false;
-tabs.forEach(t=>t.addEventListener('click',()=>{const name=t.dataset.tab;if(!isAuthed&&name!=='login')return;setActiveTab(name)}));
+tabs.forEach(t=>t.addEventListener('click',()=>{const name=t.dataset.tab;if((!isAuthed||!navigator.onLine)&&name!=='login')return;setActiveTab(name)}));
 const networkStatus = document.getElementById('networkStatus');
 function updateNetwork(){if(networkStatus)networkStatus.textContent=navigator.onLine?'線上':'離線'}
 updateNetwork();
@@ -41,24 +41,7 @@ async function loadFirebase(){
 }
 async function hashPassword(p){if(!p)return '';const enc=new TextEncoder();const buf=await crypto.subtle.digest('SHA-256',enc.encode(p));const arr=Array.from(new Uint8Array(buf));return arr.map(b=>b.toString(16).padStart(2,'0')).join('')}
 
-async function openIDB(){
-  return new Promise((resolve,reject)=>{
-    const req = indexedDB.open('nw-patrol',3);
-    req.onupgradeneeded = ()=>{
-      const d = req.result;
-      if(!d.objectStoreNames.contains('points')){d.createObjectStore('points',{keyPath:'code'})}
-      if(!d.objectStoreNames.contains('checkins')){d.createObjectStore('checkins',{keyPath:'id'})}
-      if(!d.objectStoreNames.contains('photos')){d.createObjectStore('photos',{keyPath:'id'})}
-      if(!d.objectStoreNames.contains('communities')){d.createObjectStore('communities',{keyPath:'code'})}
-      if(!d.objectStoreNames.contains('accounts')){d.createObjectStore('accounts',{keyPath:'id'})}
-      if(!d.objectStoreNames.contains('tasks')){d.createObjectStore('tasks',{keyPath:'code'})}
-    };
-    req.onsuccess = ()=>resolve(req.result);
-    req.onerror = ()=>reject(req.error);
-  });
-}
-
-function tx(store,mode){return db.transaction(store,mode).objectStore(store)}
+// IndexedDB 已完全移除
 function uuid(){return 'id-'+Math.random().toString(36).slice(2)+Date.now()}
 async function fsRetry(op){let i=0;let last=null;while(i<3){try{return await op()}catch(e){last=e;i++;await new Promise(r=>setTimeout(r,500))}}return null}
 function getProjectId(){try{return (firebaseApp&&firebaseApp.options&&firebaseApp.options.projectId)||DEFAULT_FIREBASE_CONFIG.projectId}catch(e){return DEFAULT_FIREBASE_CONFIG.projectId}}
@@ -83,35 +66,25 @@ const btnClearLocal = document.getElementById('btnClearLocal');
 const loginStatus = document.getElementById('loginStatus');
 
 if(btnSaveFirebase){btnSaveFirebase.addEventListener('click',async()=>{if(!firebaseConfigJson.value.trim())return;localStorage.setItem('firebaseConfig',firebaseConfigJson.value.trim());await loadFirebase();firebaseConfigJson.value=localStorage.getItem('firebaseConfig')||''})}
-if(btnEnablePersistence){btnEnablePersistence.addEventListener('click',async()=>{if(!firestore)return;const fsMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');try{await fsMod.enableIndexedDbPersistence(firestore)}catch(e){}})}
-if(btnClearLocal){btnClearLocal.addEventListener('click',async()=>{indexedDB.deleteDatabase('nw-patrol');location.reload()})}
+if(btnEnablePersistence){btnEnablePersistence.addEventListener('click',async()=>{})}
+if(btnClearLocal){btnClearLocal.addEventListener('click',async()=>{})}
 
-if(btnLogin){btnLogin.addEventListener('click',async()=>{if(!auth){await loadFirebase()}if(!auth){if(loginStatus)loginStatus.textContent='Firebase 未初始化';return}const {signInWithEmailAndPassword}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');if(loginStatus)loginStatus.textContent='登入中';try{await signInWithEmailAndPassword(auth,loginEmail.value,loginPassword.value);if(loginStatus)loginStatus.textContent=''}catch(e){let networkFail=false;const c=e&&e.code||'';if(c==='auth/network-request-failed'||c==='auth/internal-error')networkFail=true;if(!networkFail){if(loginStatus){let msg='登入失敗';if(c==='auth/invalid-email')msg='Email 格式錯誤';else if(c==='auth/user-not-found')msg='帳號不存在';else if(c==='auth/wrong-password')msg='密碼錯誤';else if(c==='auth/too-many-requests')msg='嘗試過多，請稍後再試';else if(c==='auth/operation-not-allowed')msg='此登入方式未啟用';loginStatus.textContent=msg}return}
-    const accounts= await getAll('accounts');const acc=accounts.find(x=>x.email===loginEmail.value.trim());if(!acc||!acc.localPasswordHash){if(loginStatus)loginStatus.textContent='離線登入失敗：找不到帳號或未設定密碼';return}
-    const hp=await hashPassword(loginPassword.value.trim());if(hp!==acc.localPasswordHash){if(loginStatus)loginStatus.textContent='離線登入失敗：密碼錯誤';return}
-    isAuthed=true;setActiveTab('home');updateNavVisibility();if(loginStatus)loginStatus.textContent='離線模式';
-  }})}
+if(btnLogin){btnLogin.addEventListener('click',async()=>{if(!auth){await loadFirebase()}if(!auth){if(loginStatus)loginStatus.textContent='Firebase 未初始化';return}const {signInWithEmailAndPassword}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');if(loginStatus)loginStatus.textContent='登入中';try{await signInWithEmailAndPassword(auth,loginEmail.value,loginPassword.value);if(loginStatus)loginStatus.textContent=''}catch(e){if(loginStatus){let msg='登入失敗';const c=e&&e.code||'';if(c==='auth/invalid-email')msg='Email 格式錯誤';else if(c==='auth/user-not-found')msg='帳號不存在';else if(c==='auth/wrong-password')msg='密碼錯誤';else if(c==='auth/too-many-requests')msg='嘗試過多，請稍後再試';else if(c==='auth/network-request-failed')msg='網路連線失敗';else if(c==='auth/internal-error')msg='內部錯誤，請重試';else if(c==='auth/operation-not-allowed')msg='此登入方式未啟用';loginStatus.textContent=msg}}})}
 if(btnSignup){btnSignup.addEventListener('click',async()=>{if(!auth)return;const {createUserWithEmailAndPassword}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');if(loginStatus)loginStatus.textContent='註冊中';try{await createUserWithEmailAndPassword(auth,loginEmail.value,loginPassword.value);if(loginStatus)loginStatus.textContent=''}catch(e){if(loginStatus){let msg='註冊失敗';const c=e&&e.code||'';if(c==='auth/email-already-in-use')msg='Email 已被使用';else if(c==='auth/weak-password')msg='密碼強度不足';else if(c==='auth/operation-not-allowed')msg='此註冊方式未啟用';else if(c==='auth/network-request-failed')msg='網路連線失敗';loginStatus.textContent=msg}}})}
 if(btnGoogle){btnGoogle.addEventListener('click',async()=>{if(!auth)return;const {GoogleAuthProvider,signInWithPopup}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');if(loginStatus)loginStatus.textContent='Google 登入中';try{await signInWithPopup(auth,new GoogleAuthProvider());if(loginStatus)loginStatus.textContent=''}catch(e){if(loginStatus){let msg='Google 登入失敗';const c=e&&e.code||'';if(c==='auth/popup-blocked')msg='瀏覽器封鎖彈出視窗';else if(c==='auth/popup-closed-by-user')msg='已關閉登入視窗';else if(c==='auth/network-request-failed')msg='網路連線失敗';loginStatus.textContent=msg}}})}
 if(btnLogout){btnLogout.addEventListener('click',async()=>{if(!auth)return;const {signOut}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');await signOut(auth)})}
 
-async function refreshAuthState(){if(!auth)return;const {onAuthStateChanged}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');onAuthStateChanged(auth,async u=>{let nameText='';if(u){const items=await getAll('accounts');const acc=items.find(x=>x.id===u.uid||x.email===u.email);nameText=acc?acc.name:(u.displayName||'')}userEmail.textContent=nameText;isAuthed=!!u;btnLogout.style.display=isAuthed?'inline-block':'none';updateNavVisibility();setActiveTab(isAuthed?'home':'login');if(isAuthed){await ensureCurrentUserAccount()}if(isAuthed&&navigator.onLine){await syncCommunitiesFromCloud();await syncAccountsFromCloud();await syncTasksFromCloud();renderCommunities();renderAccounts();renderTasks()}})}
+async function refreshAuthState(){if(!auth)return;const {onAuthStateChanged}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');onAuthStateChanged(auth,async u=>{let nameText='';if(u){const items=await getAll('accounts');const acc=items.find(x=>x.id===u.uid||x.email===u.email);nameText=acc?acc.name:(u.displayName||'')}userEmail.textContent=nameText;isAuthed=!!u;btnLogout.style.display=isAuthed?'inline-block':'none';updateNavVisibility();setActiveTab(isAuthed&&navigator.onLine?'home':'login');if(isAuthed&&navigator.onLine){await ensureCurrentUserAccount();await syncCommunitiesFromCloud();await syncAccountsFromCloud();await syncTasksFromCloud();renderCommunities();renderAccounts();renderTasks()}})}
 
 const pointName = document.getElementById('pointName');
 const pointCode = document.getElementById('pointCode');
 const btnAddPoint = document.getElementById('btnAddPoint');
 const pointsList = document.getElementById('pointsList');
 
-if(btnAddPoint){btnAddPoint.addEventListener('click',async()=>{
-  if(!pointName||!pointCode||!pointName.value||!pointCode.value)return;
-  const store = tx('points','readwrite');
-  store.put({code:pointCode.value,name:pointName.value,updatedAt:Date.now()});
-  renderPoints();
-  pointName.value='';pointCode.value='';
-})}
+if(btnAddPoint){btnAddPoint.addEventListener('click',async()=>{return})}
 
-async function getAll(store){return new Promise(res=>{const r=tx(store,'readonly').getAll();r.onsuccess=()=>res(r.result)})}
-async function renderPoints(){const items=await getAll('points');if(!pointsList){updateHome();return}pointsList.innerHTML='';items.forEach(p=>{const el=document.createElement('div');el.className='item';el.innerHTML=`<div><strong>${p.name}</strong><br><span>${p.code}</span></div><button data-code="${p.code}" class="btn outline">刪除</button>`;el.querySelector('button').addEventListener('click',()=>{tx('points','readwrite').delete(p.code);renderPoints()});pointsList.appendChild(el)});updateHome()}
+async function getAll(store){if(!firestore||!auth||!navigator.onLine)return [];const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');let path='';if(store==='communities')path='orgs/default/communities';else if(store==='accounts')path='orgs/default/accounts';else if(store==='tasks')path='orgs/default/tasks';else if(store==='checkins')path='orgs/default/checkins';else if(store==='points')path='';if(!path){return []}const user=auth.currentUser;const col=fsMod.collection(firestore,path);let snap=null;if(store==='checkins'&&user){const q=fsMod.query(col,fsMod.where('userId','==',user.uid));snap=await fsRetry(()=>fsMod.getDocs(q))}else{snap=await fsRetry(()=>fsMod.getDocs(col))}const out=[];if(snap&&typeof snap.forEach==='function'){snap.forEach(d=>out.push(d.data()))}return out}
+async function renderPoints(){const items=await getAll('points');if(!pointsList){updateHome();return}pointsList.innerHTML='';items.forEach(p=>{const el=document.createElement('div');el.className='item';el.innerHTML=`<div><strong>${p.name}</strong><br><span>${p.code}</span></div>`;pointsList.appendChild(el)});updateHome()}
 
 let camera = document.getElementById('camera');
 
@@ -187,31 +160,27 @@ if(btnPostConfirm){btnPostConfirm.addEventListener('click',confirmPost)}
 
 if(btnCheckin){btnCheckin.addEventListener('click',async()=>{
   const id=uuid();
-  const item={id,pointCode:currentPoint?currentPoint.code:manualCode.value,pointName:currentPoint?currentPoint.name:'',note:taskNote.value||'',createdAt:Date.now(),pending:true,photoId:null};
-  tx('checkins','readwrite').put(item);
-  if(photoInput&&photoInput.files&&photoInput.files[0]){const phId=uuid();const fr=new FileReader();fr.onload=()=>{tx('photos','readwrite').put({id:phId,checkinId:id,blob:new Blob([fr.result])});tx('checkins','readwrite').put({...item,photoId:phId});renderHistory()};fr.readAsArrayBuffer(photoInput.files[0])}else{renderHistory()}
-  currentPoint=null;if(currentPointName){currentPointName.value=''}if(taskNote){taskNote.value=''}if(photoInput){photoInput.value=''}if(scanStatus){scanStatus.textContent='已建立本機打卡'}
+  const user=auth&&auth.currentUser; if(!user||!navigator.onLine){return}
+  const base={id,pointCode:currentPoint?currentPoint.code:manualCode.value,pointName:currentPoint?currentPoint.name:'',note:taskNote.value||'',createdAt:Date.now(),userId:user.uid};
+  let photoData='';
+  if(photoInput&&photoInput.files&&photoInput.files[0]){
+    const fr=new FileReader();
+    fr.onload=async()=>{const blob=new Blob([fr.result]);photoData=await compressImageBlob(blob);await upsertCheckinCloud({...base,photoData});renderHistory()};
+    fr.readAsArrayBuffer(photoInput.files[0])
+  }else{
+    await upsertCheckinCloud(base);renderHistory()
+  }
+  currentPoint=null;if(currentPointName){currentPointName.value=''}if(taskNote){taskNote.value=''}if(photoInput){photoInput.value=''}if(scanStatus){scanStatus.textContent='已送出打卡'}
 })}
 
 const historyList = document.getElementById('historyList');
 const btnSync = document.getElementById('btnSync');
 const syncStatus = document.getElementById('syncStatus');
 
-async function renderHistory(){const items=await getAll('checkins');if(!historyList){updateHome();return}historyList.innerHTML='';items.sort((a,b)=>b.createdAt-a.createdAt).forEach(c=>{const el=document.createElement('div');el.className='item';const d=new Date(c.createdAt);el.innerHTML=`<div><strong>${c.pointName||c.pointCode}</strong><br><span>${d.toLocaleString()} • ${c.note||''}</span></div><span>${c.pending?'待同步':'已同步'}</span>`;historyList.appendChild(el)});updateHome()}
+async function renderHistory(){const items=await getAll('checkins');if(!historyList){updateHome();return}historyList.innerHTML='';items.sort((a,b)=>b.createdAt-a.createdAt).forEach(c=>{const el=document.createElement('div');el.className='item';const d=new Date(c.createdAt);el.innerHTML=`<div><strong>${c.pointName||c.pointCode}</strong><br><span>${d.toLocaleString()} • ${c.note||''}</span></div><span>已同步</span>`;historyList.appendChild(el)});updateHome()}
 
 async function syncNow(){if(!auth||!firestore||!navigator.onLine){if(syncStatus)syncStatus.textContent='無法同步';return}
   if(syncStatus)syncStatus.textContent='同步中';
-  const fsMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');
-  const user = auth.currentUser; if(!user){syncStatus.textContent='請先登入';return}
-  const pending = (await getAll('checkins')).filter(x=>x.pending);
-  for(const c of pending){
-    let photoData='';
-    if(c.photoId){const phReq=tx('photos','readonly').get(c.photoId);await new Promise(r=>phReq.onsuccess=r);const rec=phReq.result;if(rec&&rec.blob){photoData=await compressImageBlob(rec.blob)}}
-    const docRef = fsMod.doc(firestore,`orgs/default/checkins/${c.id}`);
-    const ok=await fsRetry(()=>fsMod.setDoc(docRef,{userId:user.uid,pointCode:c.pointCode,pointName:c.pointName,note:c.note,createdAt:c.createdAt,photoData}));
-    if(ok===null){await fsRestUpsert(`orgs/default/checkins/${c.id}`,{userId:user.uid,pointCode:c.pointCode,pointName:c.pointName,note:c.note,createdAt:c.createdAt,photoData})}
-    tx('checkins','readwrite').put({...c,pending:false});
-  }
   renderHistory();
   if(syncStatus)syncStatus.textContent='同步完成'
 }
@@ -225,12 +194,13 @@ const tabPoints=document.querySelector('[data-tab="points"]');
 const tabHistory=document.querySelector('[data-tab="history"]');
 const tabSettings=document.querySelector('[data-tab="settings"]');
 function updateNavVisibility(){
-  if(navEl)navEl.style.display=isAuthed?'flex':'none';
-  if(tabLogin)tabLogin.style.display=isAuthed?'none':'inline-block';
-  if(tabHome)tabHome.style.display=isAuthed?'inline-block':'none';
-  if(tabScan)tabScan.style.display=isAuthed?'inline-block':'none';
-  if(tabPoints)tabPoints.style.display=isAuthed?'inline-block':'none';
-  if(tabHistory)tabHistory.style.display=isAuthed?'inline-block':'none';
+  const ready=isAuthed&&navigator.onLine;
+  if(navEl)navEl.style.display=ready?'flex':'none';
+  if(tabLogin)tabLogin.style.display=ready?'none':'inline-block';
+  if(tabHome)tabHome.style.display=ready?'inline-block':'none';
+  if(tabScan)tabScan.style.display=ready?'inline-block':'none';
+  if(tabPoints)tabPoints.style.display=ready?'inline-block':'none';
+  if(tabHistory)tabHistory.style.display=ready?'inline-block':'none';
   if(tabSettings)tabSettings.style.display='inline-block';
 }
 
@@ -246,7 +216,7 @@ if(btnQuickSync)btnQuickSync.addEventListener('click',syncNow);
 const homePointsCount=document.getElementById('homePointsCount');
 const homeCheckinsCount=document.getElementById('homeCheckinsCount');
 const homePendingCount=document.getElementById('homePendingCount');
-async function updateHome(){const pts=await getAll('points');const ch=await getAll('checkins');const pend=ch.filter(x=>x.pending).length;if(homePointsCount)homePointsCount.textContent=String(pts.length);if(homeCheckinsCount)homeCheckinsCount.textContent=String(ch.length);if(homePendingCount)homePendingCount.textContent=String(pend)}
+async function updateHome(){const pts=await getAll('points');const ch=await getAll('checkins');const pend=0;if(homePointsCount)homePointsCount.textContent=String(pts.length);if(homeCheckinsCount)homeCheckinsCount.textContent=String(ch.length);if(homePendingCount)homePendingCount.textContent=String(pend)}
 
 const btnOpenCommunity=document.getElementById('btnOpenCommunity');
 const modalCommunity=document.getElementById('modalCommunity');
@@ -288,37 +258,36 @@ const btnSaveTaskPoints=document.getElementById('btnSaveTaskPoints');
 const btnCancelTaskPoints=document.getElementById('btnCancelTaskPoints');
 let editingTaskPoints=[];
 
-(async()=>{await loadFirebase();try{db=await openIDB()}catch(e){console.warn('IndexedDB 無法使用',e)}if(firebaseConfigJson){firebaseConfigJson.value=localStorage.getItem('firebaseConfig')||''}await refreshAuthState();updateNavVisibility();if(db){await renderPoints();await renderHistory();await renderTasks()}})();
+(async()=>{await loadFirebase();if(firebaseConfigJson){firebaseConfigJson.value=localStorage.getItem('firebaseConfig')||''}await refreshAuthState();updateNavVisibility();await renderPoints();await renderHistory();await renderTasks()})();
 
 
-async function renderCommunities(){if(!communitiesList)return;const items=await getAll('communities');communitiesList.innerHTML='';items.forEach(c=>{const el=document.createElement('div');el.className='item';el.innerHTML=`<div>${c.code}</div><div>${c.name}</div><div>${c.area}</div><div><button class=\"btn\" data-act=\"edit\" data-code=\"${c.code}\">編輯</button> <button class=\"btn outline\" data-act=\"del\" data-code=\"${c.code}\">刪除</button></div>`;el.querySelector('[data-act="edit"]').addEventListener('click',()=>openCommunityModal('edit',c));el.querySelector('[data-act="del"]').addEventListener('click',()=>{if(!confirm(`確定要刪除社區 ${c.name}？`))return;tx('communities','readwrite').delete(c.code).onsuccess=()=>{deleteCommunityCloud(c.code);renderCommunities()}});communitiesList.appendChild(el)})}
+async function renderCommunities(){if(!communitiesList)return;const items=await getAll('communities');communitiesList.innerHTML='';items.forEach(c=>{const el=document.createElement('div');el.className='item';el.innerHTML=`<div>${c.code}</div><div>${c.name}</div><div>${c.area}</div><div><button class=\"btn\" data-act=\"edit\" data-code=\"${c.code}\">編輯</button> <button class=\"btn outline\" data-act=\"del\" data-code=\"${c.code}\">刪除</button></div>`;el.querySelector('[data-act="edit"]').addEventListener('click',()=>openCommunityModal('edit',c));el.querySelector('[data-act="del"]').addEventListener('click',async()=>{if(!confirm(`確定要刪除社區 ${c.name}？`))return;await deleteCommunityCloud(c.code);renderCommunities()});communitiesList.appendChild(el)})}
 
 function buildServiceComms(container, selectAll){if(!container)return;container.innerHTML='';getAll('communities').then(items=>{items.forEach(c=>{const id='mcomm-'+c.code;const w=document.createElement('label');w.className='check';w.innerHTML=`<input type="checkbox" value="${c.code}" id="${id}"> <span>${c.name}</span>`;container.appendChild(w)});if(selectAll){selectAll.checked=false;selectAll.onclick=()=>{const boxes=container.querySelectorAll('input[type="checkbox"]');boxes.forEach(b=>b.checked=selectAll.checked)}}})}
 
-async function renderAccounts(){if(!accountsList)return;const items=await getAll('accounts');accountsList.innerHTML='';items.forEach(a=>{const el=document.createElement('div');el.className='item';const svc=(a.serviceCommunities||[]).join(',');el.innerHTML=`<div>${a.role||''}</div><div>${a.name||''}</div><div>${a.phone||''}</div><div>${a.email||''}</div><div>${svc}</div><div><button class=\"btn\" data-act=\"edit\" data-id=\"${a.id}\">編輯</button> <button class=\"btn outline\" data-act=\"del\" data-id=\"${a.id}\">刪除</button></div>`;el.querySelector('[data-act="edit"]').addEventListener('click',()=>openAccountModal('edit',a));el.querySelector('[data-act="del"]').addEventListener('click',()=>{if(!confirm(`確定要刪除帳號 ${a.name}？`))return;tx('accounts','readwrite').delete(a.id).onsuccess=()=>{deleteAccountCloud(a.id);renderAccounts()}});accountsList.appendChild(el)})}
+async function renderAccounts(){if(!accountsList)return;const items=await getAll('accounts');accountsList.innerHTML='';items.forEach(a=>{const el=document.createElement('div');el.className='item';const svc=(a.serviceCommunities||[]).join(',');el.innerHTML=`<div>${a.role||''}</div><div>${a.name||''}</div><div>${a.phone||''}</div><div>${a.email||''}</div><div>${svc}</div><div><button class=\"btn\" data-act=\"edit\" data-id=\"${a.id}\">編輯</button> <button class=\"btn outline\" data-act=\"del\" data-id=\"${a.id}\">刪除</button></div>`;el.querySelector('[data-act="edit"]').addEventListener('click',()=>openAccountModal('edit',a));el.querySelector('[data-act="del"]').addEventListener('click',async()=>{if(!confirm(`確定要刪除帳號 ${a.name}？`))return;await deleteAccountCloud(a.id);renderAccounts()});accountsList.appendChild(el)})}
 
-async function ensureCurrentUserAccount(){const u=auth.currentUser;if(!u)return;const items=await getAll('accounts');let ex=items.find(x=>x.id===u.uid||x.email===u.email);if(ex)return;const item={id:u.uid,role:'一般',name:u.displayName||'',phone:'',email:u.email||'',serviceCommunities:[],updatedAt:Date.now()};return new Promise(r=>{tx('accounts','readwrite').put(item).onsuccess=()=>{upsertAccountCloud(item);renderAccounts();r()}})}
+async function ensureCurrentUserAccount(){const u=auth.currentUser;if(!u)return;const items=await getAll('accounts');let ex=items.find(x=>x.id===u.uid||x.email===u.email);if(ex)return;const item={id:u.uid,role:'一般',name:u.displayName||'',phone:'',email:u.email||'',serviceCommunities:[],updatedAt:Date.now()};await upsertAccountCloud(item);renderAccounts()}
 
 function openCommunityModal(mode,data){modalCommunity.classList.remove('hidden');modalCommunity.dataset.mode=mode||'create';mCommCode.disabled=mode==='edit';mCommCode.value=data?data.code:'';mCommName.value=data?data.name:'';mCommArea.value=data?data.area:'台北';if(!mCommArea.value)mCommArea.value='台北'}
 function closeCommunityModal(){modalCommunity.classList.add('hidden')}
 if(btnOpenCommunity){btnOpenCommunity.addEventListener('click',()=>openCommunityModal('create'))}
 if(btnCancelCommunity){btnCancelCommunity.addEventListener('click',closeCommunityModal)}
-if(btnSaveCommunity){btnSaveCommunity.addEventListener('click',()=>{const code=mCommCode.value.trim();const name=mCommName.value.trim();const area=mCommArea.value.trim();if(!code||!name||!area)return;const item={code,name,area,updatedAt:Date.now()};tx('communities','readwrite').put(item).onsuccess=()=>{closeCommunityModal();upsertCommunityCloud(item);renderCommunities()}})}
+if(btnSaveCommunity){btnSaveCommunity.addEventListener('click',async()=>{const code=mCommCode.value.trim();const name=mCommName.value.trim();const area=mCommArea.value.trim();if(!code||!name||!area)return;const item={code,name,area,updatedAt:Date.now()};closeCommunityModal();await upsertCommunityCloud(item);renderCommunities()})}
 
 function openAccountModal(mode,data){modalAccount.classList.remove('hidden');modalAccount.dataset.mode=mode||'create';modalAccount.dataset.id=data?data.id:'';mAccRole.value=data?data.role:'';mAccName.value=data?data.name:'';mAccPhone.value=data?data.phone:'';mAccEmail.value=data?data.email:'';if(mAccPassword)mAccPassword.value='';buildServiceComms(mServiceComms,mSelectAllComms);setTimeout(()=>{if(data&&data.serviceCommunities){mServiceComms.querySelectorAll('input[type="checkbox"]').forEach(b=>{b.checked=data.serviceCommunities.includes(b.value)})}},100)}
 function closeAccountModal(){modalAccount.classList.add('hidden')}
 if(btnOpenAccount){btnOpenAccount.addEventListener('click',()=>openAccountModal('create'))}
 if(btnCancelAccount){btnCancelAccount.addEventListener('click',closeAccountModal)}
-if(btnSaveAccount){btnSaveAccount.addEventListener('click',async()=>{const id=modalAccount.dataset.mode==='edit'?modalAccount.dataset.id:uuid();const selected=[];mServiceComms.querySelectorAll('input[type="checkbox"]:checked').forEach(b=>selected.push(b.value));const all=await getAll('accounts');const existing=all.find(x=>x.id===id);
-  const item={id,role:mAccRole.value.trim(),name:mAccName.value.trim(),phone:mAccPhone.value.trim(),email:mAccEmail.value.trim(),serviceCommunities:selected,updatedAt:Date.now(),localPasswordHash:existing?existing.localPasswordHash:''};if(!item.role||!item.name||!item.phone||!item.email)return;try{if(auth&&auth.currentUser&&modalAccount.dataset.mode==='edit'&&id===auth.currentUser.uid&&mAccPassword&&mAccPassword.value.trim()){const {updatePassword}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');await updatePassword(auth.currentUser,mAccPassword.value.trim())}}catch(e){}if(mAccPassword&&mAccPassword.value.trim()){item.localPasswordHash=await hashPassword(mAccPassword.value.trim())}tx('accounts','readwrite').put(item).onsuccess=()=>{closeAccountModal();upsertAccountCloud(item);renderAccounts()}})}
+if(btnSaveAccount){btnSaveAccount.addEventListener('click',async()=>{const id=modalAccount.dataset.mode==='edit'?modalAccount.dataset.id:uuid();const selected=[];mServiceComms.querySelectorAll('input[type="checkbox"]:checked').forEach(b=>selected.push(b.value));const item={id,role:mAccRole.value.trim(),name:mAccName.value.trim(),phone:mAccPhone.value.trim(),email:mAccEmail.value.trim(),serviceCommunities:selected,updatedAt:Date.now()};if(!item.role||!item.name||!item.phone||!item.email)return;try{if(auth&&auth.currentUser&&modalAccount.dataset.mode==='edit'&&id===auth.currentUser.uid&&mAccPassword&&mAccPassword.value.trim()){const {updatePassword}=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');await updatePassword(auth.currentUser,mAccPassword.value.trim())}}catch(e){}closeAccountModal();await upsertAccountCloud(item);renderAccounts()})}
 
 async function upsertCommunityCloud(c){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/communities/${c.code}`);const ok=await fsRetry(()=>fsMod.setDoc(ref,c,{merge:true}));if(ok===null){await fsRestUpsert(`orgs/default/communities/${c.code}`,c)}}
 async function deleteCommunityCloud(code){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/communities/${code}`);const ok=await fsRetry(()=>fsMod.deleteDoc(ref));if(ok===null){await fsRestDelete(`orgs/default/communities/${code}`)}}
-async function syncCommunitiesFromCloud(){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const col=fsMod.collection(firestore,'orgs/default/communities');const snap=await fsRetry(()=>fsMod.getDocs(col));if(!snap||typeof snap.forEach!=='function')return;const store=tx('communities','readwrite');snap.forEach(d=>{store.put({...d.data()})});const locals=await getAll('communities');for(const c of locals){await upsertCommunityCloud(c)}}
+async function syncCommunitiesFromCloud(){return}
 
 async function upsertAccountCloud(a){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/accounts/${a.id}`);const ok=await fsRetry(()=>fsMod.setDoc(ref,a,{merge:true}));if(ok===null){await fsRestUpsert(`orgs/default/accounts/${a.id}`,a)}}
 async function deleteAccountCloud(id){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/accounts/${id}`);const ok=await fsRetry(()=>fsMod.deleteDoc(ref));if(ok===null){await fsRestDelete(`orgs/default/accounts/${id}`)}}
-async function syncAccountsFromCloud(){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const col=fsMod.collection(firestore,'orgs/default/accounts');const snap=await fsRetry(()=>fsMod.getDocs(col));if(!snap||typeof snap.forEach!=='function')return;const store=tx('accounts','readwrite');snap.forEach(d=>{store.put({...d.data()})});const locals=await getAll('accounts');for(const a of locals){await upsertAccountCloud(a)}}
+async function syncAccountsFromCloud(){return}
 
 function openTaskModal(mode,data){modalTask.classList.remove('hidden');modalTask.dataset.mode=mode||'create';modalTask.dataset.code=data?data.code:'';mTaskName.value=data?data.name||'':'';mTaskTimeStart.value=data?data.timeStart||'':'';mTaskTimeEnd.value=data?data.timeEnd||'':'';mTaskAllWeek.checked=!!(data&&data.allWeek);buildTaskDays(data&&data.days||[]);mTaskPointCount.value=data?String(data.pointCount||1):'';btnOpenTaskPoints.textContent=`巡邏點(${mTaskPointCount.value?mTaskPointCount.value:0})`;mTaskCode.disabled=mode==='edit';buildTaskCommunities().then(()=>{if(data){mTaskCommunity.value=data.communityCode;mTaskCode.value=data.code;editingTaskPoints=data.pointsDetailed||[]}else{const first=mTaskCommunity.querySelector('option');if(first){mTaskCommunity.value=first.value;mTaskCode.value=''}editingTaskPoints=[]}if(!data){updateTaskCode()}})}
 function closeTaskModal(){modalTask.classList.add('hidden')}
@@ -328,7 +297,7 @@ async function nextTaskCode(commCode){const items=await getAll('tasks');const li
 async function renderTasks(){if(!tasksList)return;const items=await getAll('tasks');tasksList.innerHTML='';items.forEach(t=>{const freq=t.allWeek?'整週':(Array.isArray(t.days)?t.days.map(d=>['週一','週二','週三','週四','週五','週六','週日'][d-1]).join(','):'');const timeStr=t.time?t.time:((t.timeStart&&t.timeEnd)?`${t.timeStart}~${t.timeEnd}`:'');const el=document.createElement('div');el.className='item';const ptsCount=(Array.isArray(t.pointsDetailed)&&t.pointsDetailed.length>0)?t.pointsDetailed.length:(t.pointCount||0);el.innerHTML=`<div>${t.communityCode}</div><div>${t.communityName||''}</div><div>${t.code}</div><div>${t.name||''}</div><div>${timeStr}</div><div>${freq}</div><div><button class=\"btn\" data-act=\"points\" data-code=\"${t.code}\">巡邏點(${ptsCount})</button></div><div><button class=\"btn\" data-act=\"edit\" data-code=\"${t.code}\">編輯</button> <button class=\"btn outline\" data-act=\"del\" data-code=\"${t.code}\">刪除</button></div>`;el.querySelector('[data-act=\"points\"]').addEventListener('click',()=>{openPointsModal(t)});el.querySelector('[data-act=\"edit\"]').addEventListener('click',()=>openTaskModal('edit',t));el.querySelector('[data-act=\"del\"]').addEventListener('click',()=>{if(!confirm(`確定要刪除任務 ${t.name||t.code}？`))return;tx('tasks','readwrite').delete(t.code).onsuccess=()=>{deleteTaskCloud(t.code);renderTasks()}});tasksList.appendChild(el)})}
 if(btnOpenTask){btnOpenTask.addEventListener('click',()=>openTaskModal('create'))}
 if(btnCancelTask){btnCancelTask.addEventListener('click',closeTaskModal)}
-if(btnSaveTask){btnSaveTask.addEventListener('click',()=>{const mode=modalTask.dataset.mode||'create';const commCode=mTaskCommunity.value;const commName=mTaskCommunity.options[mTaskCommunity.selectedIndex]?.textContent||'';const code=mode==='edit'?(modalTask.dataset.code||mTaskCode.value):mTaskCode.value;const name=mTaskName.value.trim();const pc=parseInt(mTaskPointCount.value,10);const timeStart=mTaskTimeStart.value||'';const timeEnd=mTaskTimeEnd.value||'';const allWeek=mTaskAllWeek.checked;const days=[];mTaskDays.querySelectorAll('input[type="checkbox"]:checked').forEach(b=>days.push(parseInt(b.value,10)));if(allWeek&&days.length!==7){days.length=0;for(let i=1;i<=7;i++)days.push(i)}if(!commCode||!code||!pc||pc<1)return;if(!timeStart||!timeEnd)return;const item={code,communityCode:commCode,communityName:commName,name,pointCount:pc,timeStart,timeEnd,allWeek,days,pointsDetailed:editingTaskPoints,updatedAt:Date.now()};tx('tasks','readwrite').put(item).onsuccess=()=>{closeTaskModal();upsertTaskCloud(item);renderTasks()}})}
+if(btnSaveTask){btnSaveTask.addEventListener('click',async()=>{const mode=modalTask.dataset.mode||'create';const commCode=mTaskCommunity.value;const commName=mTaskCommunity.options[mTaskCommunity.selectedIndex]?.textContent||'';const code=mode==='edit'?(modalTask.dataset.code||mTaskCode.value):mTaskCode.value;const name=mTaskName.value.trim();const pc=parseInt(mTaskPointCount.value,10);const timeStart=mTaskTimeStart.value||'';const timeEnd=mTaskTimeEnd.value||'';const allWeek=mTaskAllWeek.checked;const days=[];mTaskDays.querySelectorAll('input[type="checkbox"]:checked').forEach(b=>days.push(parseInt(b.value,10)));if(allWeek&&days.length!==7){days.length=0;for(let i=1;i<=7;i++)days.push(i)}if(!commCode||!code||!pc||pc<1)return;if(!timeStart||!timeEnd)return;const item={code,communityCode:commCode,communityName:commName,name,pointCount:pc,timeStart,timeEnd,allWeek,days,pointsDetailed:editingTaskPoints,updatedAt:Date.now()};closeTaskModal();await upsertTaskCloud(item);renderTasks()})}
 
 function buildTaskDays(selected){mTaskDays.innerHTML='';const names=['週一','週二','週三','週四','週五','週六','週日'];for(let i=1;i<=7;i++){const w=document.createElement('label');w.className='check';w.innerHTML=`<input type="checkbox" value="${i}"> <span>${names[i-1]}</span>`;const box=w.querySelector('input');box.checked=Array.isArray(selected)?selected.includes(i):false;mTaskDays.appendChild(w)}mTaskAllWeek.onchange=()=>{const boxes=mTaskDays.querySelectorAll('input[type="checkbox"]');boxes.forEach(b=>b.checked=mTaskAllWeek.checked)}
 }
@@ -339,11 +308,11 @@ function closePointsModal(){modalTaskPoints.classList.add('hidden')}
 if(btnOpenTaskPoints){btnOpenTaskPoints.addEventListener('click',()=>{const t={code:mTaskCode.value||'',pointCount:parseInt(mTaskPointCount.value||'0',10)||0,pointsDetailed:editingTaskPoints};openPointsModal(t)})}
 if(mTaskPointCount){mTaskPointCount.addEventListener('input',()=>{btnOpenTaskPoints.textContent=`巡邏點(${mTaskPointCount.value?mTaskPointCount.value:0})`})}
 if(btnCancelTaskPoints){btnCancelTaskPoints.addEventListener('click',closePointsModal)}
-if(btnSaveTaskPoints){btnSaveTaskPoints.addEventListener('click',()=>{const blocks=taskPointsContainer.querySelectorAll('.point-block');const code=modalTaskPoints.dataset.code||'';const built=Array.from(blocks).map((el,idx)=>({qrCode:el.querySelector('.qr').value.trim()||`${code||mTaskCode.value}-${String(idx+1).padStart(3,'0')}`,pointCode:el.querySelector('.pcode').value.trim()||`${code||mTaskCode.value}-${String(idx+1).padStart(3,'0')}`,pointName:el.querySelector('.pname').value.trim(),focus:el.querySelector('.focus').value.trim(),requireReport:el.querySelector('.report').checked,requirePhoto:el.querySelector('.photo').checked}));if(!modalTask.classList.contains('hidden')){editingTaskPoints=built}else{const r=tx('tasks','readonly').get(code);r.onsuccess=()=>{const ex=r.result;if(ex){const item={...ex,pointsDetailed:built,pointCount:built.length,updatedAt:Date.now()};tx('tasks','readwrite').put(item).onsuccess=()=>{upsertTaskCloud(item);renderTasks()}}}}closePointsModal()})}
+if(btnSaveTaskPoints){btnSaveTaskPoints.addEventListener('click',async()=>{const blocks=taskPointsContainer.querySelectorAll('.point-block');const code=modalTaskPoints.dataset.code||'';const built=Array.from(blocks).map((el,idx)=>({qrCode:el.querySelector('.qr').value.trim()||`${code||mTaskCode.value}-${String(idx+1).padStart(3,'0')}`,pointCode:el.querySelector('.pcode').value.trim()||`${code||mTaskCode.value}-${String(idx+1).padStart(3,'0')}`,pointName:el.querySelector('.pname').value.trim(),focus:el.querySelector('.focus').value.trim(),requireReport:el.querySelector('.report').checked,requirePhoto:el.querySelector('.photo').checked}));if(!modalTask.classList.contains('hidden')){editingTaskPoints=built}else{await upsertTaskCloud({code,pointsDetailed:built,pointCount:built.length,updatedAt:Date.now()});renderTasks()}closePointsModal()})}
 
 async function upsertTaskCloud(t){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/tasks/${t.code}`);const ok=await fsRetry(()=>fsMod.setDoc(ref,t,{merge:true}));if(ok===null){await fsRestUpsert(`orgs/default/tasks/${t.code}`,t)}}
 async function deleteTaskCloud(code){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/tasks/${code}`);const ok=await fsRetry(()=>fsMod.deleteDoc(ref));if(ok===null){await fsRestDelete(`orgs/default/tasks/${code}`)}}
-async function syncTasksFromCloud(){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const col=fsMod.collection(firestore,'orgs/default/tasks');const snap=await fsRetry(()=>fsMod.getDocs(col));if(!snap||typeof snap.forEach!=='function')return;const store=tx('tasks','readwrite');snap.forEach(d=>{store.put({...d.data()})});const locals=await getAll('tasks');for(const t of locals){await upsertTaskCloud(t)}}
+async function syncTasksFromCloud(){return}
 
 if(togglePassword){togglePassword.addEventListener('click',()=>{loginPassword.type=loginPassword.type==='password'?'text':'password'})}
 const savedEmail=localStorage.getItem('rememberEmail')||'';if(savedEmail){loginEmail.value=savedEmail;if(loginRemember)loginRemember.checked=true}
@@ -380,4 +349,5 @@ function stopModalScan(){if(qrCamera&&qrCamera.srcObject){qrCamera.srcObject.get
 async function afterScanConfirm(){if(!latestScanCode)return;const tasks=await getAll('tasks');let found=null;for(const t of tasks){if(Array.isArray(t.pointsDetailed)){for(const p of t.pointsDetailed){if(p.qrCode===latestScanCode||p.pointCode===latestScanCode){found=p;break}}}if(found)break}latestRequirePhoto=!!(found&&found.requirePhoto);latestRequireReport=!!(found&&found.requireReport);latestPointName=found?found.pointName:'';closeQRModal();openPostModal(latestRequireReport,latestRequirePhoto)}
 function openPostModal(showNote,showPhoto){if(!modalPostActions)return;modalPostActions.classList.remove('hidden');if(postNote)postNote.style.display=showNote?'block':'none';if(postPhoto)postPhoto.style.display=showPhoto?'block':'none'}
 function closePostModal(){if(!modalPostActions)return;modalPostActions.classList.add('hidden')}
-async function confirmPost(){const id=uuid();const noteVal=postNote&&postNote.style.display!=='none'?(postNote.value||''):'';const item={id,pointCode:latestScanCode,pointName:latestPointName||'',note:noteVal,createdAt:Date.now(),pending:true,photoId:null};tx('checkins','readwrite').put(item);if(postPhoto&&postPhoto.style.display!=='none'&&postPhoto.files&&postPhoto.files[0]){const phId=uuid();const fr=new FileReader();fr.onload=()=>{tx('photos','readwrite').put({id:phId,checkinId:id,blob:new Blob([fr.result])});tx('checkins','readwrite').put({...item,photoId:phId});renderHistory()};fr.readAsArrayBuffer(postPhoto.files[0])}else{renderHistory()}closePostModal()}
+async function confirmPost(){const id=uuid();const user=auth&&auth.currentUser; if(!user||!navigator.onLine){closePostModal();return}const noteVal=postNote&&postNote.style.display!=='none'?(postNote.value||''):'';let photoData='';if(postPhoto&&postPhoto.style.display!=='none'&&postPhoto.files&&postPhoto.files[0]){const fr=new FileReader();fr.onload=async()=>{const blob=new Blob([fr.result]);photoData=await compressImageBlob(blob);await upsertCheckinCloud({id,pointCode:latestScanCode,pointName:latestPointName||'',note:noteVal,createdAt:Date.now(),userId:user.uid,photoData});renderHistory();closePostModal()};fr.readAsArrayBuffer(postPhoto.files[0])}else{await upsertCheckinCloud({id,pointCode:latestScanCode,pointName:latestPointName||'',note:noteVal,createdAt:Date.now(),userId:user.uid});renderHistory();closePostModal()}}
+async function upsertCheckinCloud(c){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/checkins/${c.id}`);const ok=await fsRetry(()=>fsMod.setDoc(ref,c,{merge:true}));if(ok===null){await fsRestUpsert(`orgs/default/checkins/${c.id}`,c)}}
