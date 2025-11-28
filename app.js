@@ -39,7 +39,7 @@ async function loadFirebase(){
   firestore = fsMod.initializeFirestore(firebaseApp,{experimentalForceLongPolling:true,useFetchStreams:false});
   
 }
-async function hashPassword(p){if(!p)return '';const enc=new TextEncoder();const buf=await crypto.subtle.digest('SHA-256',enc.encode(p));const arr=Array.from(new Uint8Array(buf));return arr.map(b=>b.toString(16).padStart(2,'0')).join('')}
+// 已不使用離線密碼雜湊
 
 // IndexedDB 已完全移除
 function uuid(){return 'id-'+Math.random().toString(36).slice(2)+Date.now()}
@@ -351,3 +351,10 @@ function openPostModal(showNote,showPhoto){if(!modalPostActions)return;modalPost
 function closePostModal(){if(!modalPostActions)return;modalPostActions.classList.add('hidden')}
 async function confirmPost(){const id=uuid();const user=auth&&auth.currentUser; if(!user||!navigator.onLine){closePostModal();return}const noteVal=postNote&&postNote.style.display!=='none'?(postNote.value||''):'';let photoData='';if(postPhoto&&postPhoto.style.display!=='none'&&postPhoto.files&&postPhoto.files[0]){const fr=new FileReader();fr.onload=async()=>{const blob=new Blob([fr.result]);photoData=await compressImageBlob(blob);await upsertCheckinCloud({id,pointCode:latestScanCode,pointName:latestPointName||'',note:noteVal,createdAt:Date.now(),userId:user.uid,photoData});renderHistory();closePostModal()};fr.readAsArrayBuffer(postPhoto.files[0])}else{await upsertCheckinCloud({id,pointCode:latestScanCode,pointName:latestPointName||'',note:noteVal,createdAt:Date.now(),userId:user.uid});renderHistory();closePostModal()}}
 async function upsertCheckinCloud(c){if(!firestore||!auth||!navigator.onLine)return;const fsMod=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');const ref=fsMod.doc(firestore,`orgs/default/checkins/${c.id}`);const ok=await fsRetry(()=>fsMod.setDoc(ref,c,{merge:true}));if(ok===null){await fsRestUpsert(`orgs/default/checkins/${c.id}`,c)}}
+function tx(store,mode){
+  return {
+    delete(key){const ev={onsuccess:null};if(store==='tasks'){deleteTaskCloud(key).then(()=>{if(ev.onsuccess)ev.onsuccess()})}else{setTimeout(()=>{if(ev.onsuccess)ev.onsuccess()},0)}return ev},
+    put(item){const ev={onsuccess:null};if(store==='tasks'){upsertTaskCloud(item).then(()=>{if(ev.onsuccess)ev.onsuccess()})}else{setTimeout(()=>{if(ev.onsuccess)ev.onsuccess()},0)}return ev},
+    get(key){const ev={onsuccess:null,result:null};setTimeout(()=>{if(ev.onsuccess)ev.onsuccess()},0);return ev}
+  }
+}
