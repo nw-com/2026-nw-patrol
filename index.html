@@ -59,9 +59,9 @@
       <div class="card">
         <h2>概況</h2>
         <div class="list">
-          <div class="item"><span>巡邏點數</span><strong id="homePointsCount">0</strong></div>
-          <div class="item"><span>打卡筆數</span><strong id="homeCheckinsCount">0</strong></div>
-          <div class="item"><span>待同步筆數</span><strong id="homePendingCount">0</strong></div>
+          <div class="item"><span>服務社區數</span><strong id="homeSvcCount">0</strong></div>
+          <div class="item"><span>巡邏任務數</span><strong id="homeTasksCount">0</strong></div>
+          <div class="item"><span>今日巡邏點</span><strong><span id="homeTodayPointsTotal">0</span> / <span id="homeTodayPointsDone">0</span> / <span id="homeTodayPointsPending">0</span></strong></div>
         </div>
       </div>
     </section>
@@ -80,7 +80,19 @@
     </section>
 
 
-    <section id="tab-history" class="panel"></section>
+    <section id="tab-history" class="panel">
+      <div class="card">
+        <h2>篩選</h2>
+        <div class="toolbar">
+          <input id="histDate" type="date">
+          <div id="histTaskBtns" class="btn-group"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>打卡紀錄</h2>
+        <div class="list" id="historyList"></div>
+      </div>
+    </section>
 
     <section id="tab-settings" class="panel">
       <div class="card">

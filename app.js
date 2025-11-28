@@ -77,7 +77,7 @@ if(btnSignup){btnSignup.addEventListener('click',async()=>{if(!auth)return;const
 if(btnGoogle){btnGoogle.addEventListener('click',async()=>{if(!auth)return;const {GoogleAuthProvider,signInWithPopup}=await getAuthMod();if(loginStatus)loginStatus.textContent='Google 登入中';try{await signInWithPopup(auth,new GoogleAuthProvider());isAuthed=true;updateNavVisibility();setActiveTab('home');if(loginStatus)loginStatus.textContent=''}catch(e){if(loginStatus){let msg='Google 登入失敗';const c=e&&e.code||'';if(c==='auth/popup-blocked')msg='瀏覽器封鎖彈出視窗';else if(c==='auth/popup-closed-by-user')msg='已關閉登入視窗';else if(c==='auth/network-request-failed')msg='網路連線失敗';loginStatus.textContent=msg}}})}
 if(btnLogout){btnLogout.addEventListener('click',async()=>{if(!auth)return;const {signOut}=await getAuthMod();await signOut(auth)})}
 
-async function refreshAuthState(){if(!auth)return;const {onAuthStateChanged}=await getAuthMod();onAuthStateChanged(auth,u=>{isAuthed=!!u;btnLogout.style.display=isAuthed?'inline-block':'none';updateNavVisibility();setActiveTab(isAuthed&&navigator.onLine?'home':'login');if(u){userEmail.textContent=u.displayName||u.email||'';getAll('accounts').then(items=>{const acc=items.find(x=>x.id===u.uid||x.email===u.email);if(acc){userEmail.textContent=acc.name}})}if(isAuthed&&navigator.onLine){Promise.allSettled([ensureCurrentUserAccount(),(async()=>{renderCommunities()})(),(async()=>{renderAccounts()})(),(async()=>{renderTasks()})()])}})}
+async function refreshAuthState(){if(!auth)return;const {onAuthStateChanged}=await getAuthMod();onAuthStateChanged(auth,u=>{isAuthed=!!u;btnLogout.style.display=isAuthed?'inline-block':'none';updateNavVisibility();setActiveTab(isAuthed&&navigator.onLine?'home':'login');if(u){userEmail.textContent=u.displayName||u.email||'';getAll('accounts').then(items=>{const acc=items.find(x=>x.id===u.uid||x.email===u.email);if(acc){userEmail.textContent=acc.name}})}if(isAuthed&&navigator.onLine){Promise.allSettled([ensureCurrentUserAccount(),(async()=>{renderCommunities()})(),(async()=>{renderAccounts()})(),(async()=>{renderTasks()})(),(async()=>{renderHistoryToolbar()})()])}})}
 
 const pointName = document.getElementById('pointName');
 const pointCode = document.getElementById('pointCode');
@@ -148,7 +148,7 @@ async function startNFC(){
   }catch(err){}
 }
 
-async function useCode(code){if(!code)return;const p=(await getAll('points')).find(x=>x.code===code);currentPoint=p||{code,name:'未知點位'};if(currentPointName){currentPointName.value=currentPoint.name}if(scanStatus){scanStatus.textContent=`已識別代碼 ${code}`}}
+async function useCode(code){if(!code)return;latestScanCode=code;latestScanTime=Date.now();await afterScanConfirm()}
 
 if(btnStartScan){btnStartScan.addEventListener('click',startScan)}
 if(btnStopScan){btnStopScan.addEventListener('click',stopScan)}
@@ -179,8 +179,13 @@ if(btnCheckin){btnCheckin.addEventListener('click',async()=>{
 const historyList = document.getElementById('historyList');
 const btnSync = document.getElementById('btnSync');
 const syncStatus = document.getElementById('syncStatus');
+const histTaskBtns=document.getElementById('histTaskBtns');
+const histDate=document.getElementById('histDate');
+let selectedTaskCode='';
+function todayStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+if(histDate){histDate.value=todayStr();histDate.addEventListener('change',()=>{renderHistory()})}
 
-async function renderHistory(){const items=await getAll('checkins');if(!historyList){updateHome();return}historyList.innerHTML='';items.forEach(c=>{const el=document.createElement('div');el.className='item';const d=new Date(c.createdAt);el.innerHTML=`<div><strong>${c.pointName||c.pointCode}</strong><br><span>${d.toLocaleString()} • ${c.note||''}</span></div><span>已同步</span>`;historyList.appendChild(el)});updateHome()}
+async function renderHistory(){const items=await getAll('checkins');if(!historyList){updateHome();return}const ds=histDate?histDate.value:todayStr();const start=new Date(`${ds}T00:00:00`).getTime();const end=new Date(`${ds}T23:59:59`).getTime();let list=items.filter(x=>x.createdAt>=start&&x.createdAt<=end);if(selectedTaskCode){const tasks=await getAll('tasks');const t=tasks.find(x=>x.code===selectedTaskCode);if(t&&Array.isArray(t.pointsDetailed)&&t.pointsDetailed.length){const codes=t.pointsDetailed.map(p=>p.pointCode);list=list.filter(x=>codes.includes(x.pointCode))}else{list=[]}}historyList.innerHTML='';list.forEach(c=>{const el=document.createElement('div');el.className='item';const d=new Date(c.createdAt);el.innerHTML=`<div><strong>${c.pointName||c.pointCode}</strong><br><span>${d.toLocaleString()} • ${c.note||''}</span></div><span>已同步</span>`;historyList.appendChild(el)});updateHome()}
 
 async function syncNow(){if(!auth||!navigator.onLine){if(syncStatus)syncStatus.textContent='無法同步';return}
   if(syncStatus)syncStatus.textContent='同步中';
@@ -189,6 +194,8 @@ async function syncNow(){if(!auth||!navigator.onLine){if(syncStatus)syncStatus.t
 }
 
 if(btnSync){btnSync.addEventListener('click',syncNow)}
+
+async function renderHistoryToolbar(){if(!histTaskBtns)return;const u=auth&&auth.currentUser;if(!u)return;const acc=await fsRestGetDoc(`orgs/default/accounts/${u.uid}`);const svc=(acc&&acc.serviceCommunities)||[];const tasks=await getAll('tasks');const list=tasks.filter(t=>svc.includes(t.communityCode));histTaskBtns.innerHTML='';list.forEach(t=>{const b=document.createElement('button');b.className='btn';b.dataset.code=t.code;b.textContent=t.name?`${t.communityCode}-${t.name}`:`${t.communityCode}-${t.code}`;b.addEventListener('click',()=>{selectedTaskCode=t.code;renderHistory();histTaskBtns.querySelectorAll('button').forEach(x=>x.classList.toggle('outline',x.dataset.code!==selectedTaskCode))});histTaskBtns.appendChild(b)});histTaskBtns.querySelectorAll('button').forEach(x=>x.classList.add('outline'))}
 
 const tabLogin=document.querySelector('[data-tab="login"]');
 const tabHome=document.querySelector('[data-tab="home"]');
@@ -216,10 +223,12 @@ if(goPoints)goPoints.addEventListener('click',()=>setActiveTab('points'));
 if(goHistory)goHistory.addEventListener('click',()=>setActiveTab('history'));
 if(btnQuickSync)btnQuickSync.addEventListener('click',syncNow);
 
-const homePointsCount=document.getElementById('homePointsCount');
-const homeCheckinsCount=document.getElementById('homeCheckinsCount');
-const homePendingCount=document.getElementById('homePendingCount');
-async function updateHome(){const [pts,ch]=await Promise.all([getAll('points'),getAll('checkins')]);const pend=0;if(homePointsCount)homePointsCount.textContent=String(pts.length);if(homeCheckinsCount)homeCheckinsCount.textContent=String(ch.length);if(homePendingCount)homePendingCount.textContent=String(pend)}
+const homeSvcCount=document.getElementById('homeSvcCount');
+const homeTasksCount=document.getElementById('homeTasksCount');
+const homeTodayPointsTotal=document.getElementById('homeTodayPointsTotal');
+const homeTodayPointsDone=document.getElementById('homeTodayPointsDone');
+const homeTodayPointsPending=document.getElementById('homeTodayPointsPending');
+async function updateHome(){const u=auth&&auth.currentUser;if(!u||!navigator.onLine){if(homeSvcCount)homeSvcCount.textContent='0';if(homeTasksCount)homeTasksCount.textContent='0';if(homeTodayPointsTotal)homeTodayPointsTotal.textContent='0';if(homeTodayPointsDone)homeTodayPointsDone.textContent='0';if(homeTodayPointsPending)homeTodayPointsPending.textContent='0';return}const acc=await fsRestGetDoc(`orgs/default/accounts/${u.uid}`)||{};const svc=Array.isArray(acc.serviceCommunities)?acc.serviceCommunities:[];const tasks=await getAll('tasks');const tasksInSvc=tasks.filter(t=>svc.includes(t.communityCode));let expected=[];tasksInSvc.forEach(t=>{if(Array.isArray(t.pointsDetailed)&&t.pointsDetailed.length){expected.push(...t.pointsDetailed.map(p=>p.pointCode))}else{const pc=t.pointCount||0;for(let i=1;i<=pc;i++){expected.push(`${t.code}-${String(i).padStart(3,'0')}`)}}});const total=expected.length;const ds=todayStr?todayStr():new Date().toISOString().slice(0,10);const start=new Date(`${ds}T00:00:00`).getTime();const end=new Date(`${ds}T23:59:59`).getTime();const ch=await getAll('checkins');const todays=ch.filter(x=>x.createdAt>=start&&x.createdAt<=end);const expSet=new Set(expected);const doneSet=new Set();todays.forEach(c=>{if(expSet.has(c.pointCode))doneSet.add(c.pointCode)});const done=doneSet.size;const pending=Math.max(total-done,0);if(homeSvcCount)homeSvcCount.textContent=String(svc.length);if(homeTasksCount)homeTasksCount.textContent=String(tasksInSvc.length);if(homeTodayPointsTotal)homeTodayPointsTotal.textContent=String(total);if(homeTodayPointsDone)homeTodayPointsDone.textContent=String(done);if(homeTodayPointsPending)homeTodayPointsPending.textContent=String(pending)}
 
 const btnOpenCommunity=document.getElementById('btnOpenCommunity');
 const modalCommunity=document.getElementById('modalCommunity');
@@ -261,7 +270,7 @@ const btnSaveTaskPoints=document.getElementById('btnSaveTaskPoints');
 const btnCancelTaskPoints=document.getElementById('btnCancelTaskPoints');
 let editingTaskPoints=[];
 
-(async()=>{await loadFirebase();if(firebaseConfigJson){firebaseConfigJson.value=localStorage.getItem('firebaseConfig')||''}await refreshAuthState();updateNavVisibility();renderPoints();renderHistory();renderTasks()})();
+(async()=>{await loadFirebase();if(firebaseConfigJson){firebaseConfigJson.value=localStorage.getItem('firebaseConfig')||''}await refreshAuthState();updateNavVisibility();renderPoints();renderHistoryToolbar();renderHistory();renderTasks()})();
 
 
 async function renderCommunities(){if(!communitiesList)return;const items=await getAll('communities');communitiesList.innerHTML='';items.forEach(c=>{const el=document.createElement('div');el.className='item';el.innerHTML=`<div>${c.code}</div><div>${c.name}</div><div>${c.area}</div><div><button class=\"btn\" data-act=\"edit\" data-code=\"${c.code}\">編輯</button> <button class=\"btn outline\" data-act=\"del\" data-code=\"${c.code}\">刪除</button></div>`;el.querySelector('[data-act="edit"]').addEventListener('click',()=>openCommunityModal('edit',c));el.querySelector('[data-act="del"]').addEventListener('click',async()=>{if(!confirm(`確定要刪除社區 ${c.name}？`))return;await deleteCommunityCloud(c.code);renderCommunities()});communitiesList.appendChild(el)})}
@@ -347,12 +356,12 @@ async function compressImageBlob(blob){
 }
 function openQRModal(){if(!modalScanQR)return;modalScanQR.classList.remove('hidden');latestScanCode='';latestScanTime=0;if(scanCodeDisplay)scanCodeDisplay.value='';if(scanTimeDisplay)scanTimeDisplay.value='';startModalScan()}
 function closeQRModal(){if(!modalScanQR)return;modalScanQR.classList.add('hidden');stopModalScan()}
-async function startModalScan(){if(!qrCamera)return;try{const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});qrCamera.srcObject=s;await qrCamera.play()}catch(e){if(scanTimeDisplay)scanTimeDisplay.value='相機無法啟動';return}const det=('BarcodeDetector' in window)?new window.BarcodeDetector({formats:['qr_code']}):null;if(!det)return;scanTimer=setInterval(async()=>{try{const r=await det.detect(qrCamera);if(r.length){latestScanCode=r[0].rawValue;latestScanTime=Date.now();if(scanCodeDisplay)scanCodeDisplay.value=latestScanCode;if(scanTimeDisplay)scanTimeDisplay.value=new Date(latestScanTime).toLocaleString();stopModalScan()}}catch(e){}},500)}
+async function startModalScan(){if(!qrCamera)return;try{const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});qrCamera.srcObject=s;await qrCamera.play()}catch(e){if(scanTimeDisplay)scanTimeDisplay.value='相機無法啟動';return}const det=('BarcodeDetector' in window)?new window.BarcodeDetector({formats:['qr_code']}):null;if(!det)return;scanTimer=setInterval(async()=>{try{const r=await det.detect(qrCamera);if(r.length){latestScanCode=r[0].rawValue;latestScanTime=Date.now();if(scanCodeDisplay)scanCodeDisplay.value=latestScanCode;if(scanTimeDisplay)scanTimeDisplay.value=new Date(latestScanTime).toLocaleString();stopModalScan();await afterScanConfirm()}}catch(e){}},500)}
 function stopModalScan(){if(qrCamera&&qrCamera.srcObject){qrCamera.srcObject.getTracks().forEach(t=>t.stop());qrCamera.srcObject=null}if(scanTimer){clearInterval(scanTimer);scanTimer=null}}
-async function afterScanConfirm(){if(!latestScanCode)return;const tasks=await getAll('tasks');let found=null;for(const t of tasks){if(Array.isArray(t.pointsDetailed)){for(const p of t.pointsDetailed){if(p.qrCode===latestScanCode||p.pointCode===latestScanCode){found=p;break}}}if(found)break}latestRequirePhoto=!!(found&&found.requirePhoto);latestRequireReport=!!(found&&found.requireReport);latestPointName=found?found.pointName:'';closeQRModal();openPostModal(latestRequireReport,latestRequirePhoto)}
+async function afterScanConfirm(){if(!latestScanCode)return;const tasks=await getAll('tasks');let found=null;for(const t of tasks){if(Array.isArray(t.pointsDetailed)){for(const p of t.pointsDetailed){if(p.qrCode===latestScanCode||p.pointCode===latestScanCode){found=p;break}}}if(found)break}latestRequirePhoto=!!(found&&found.requirePhoto);latestRequireReport=!!(found&&found.requireReport);latestPointName=found?found.pointName:'';const canonicalCode=(found&&found.pointCode)?found.pointCode:latestScanCode;if(latestRequirePhoto||latestRequireReport){closeQRModal();openPostModal(latestRequireReport,latestRequirePhoto)}else{const id=uuid();const user=auth&&auth.currentUser; if(!user||!navigator.onLine){return}await upsertCheckinCloud({id,pointCode:canonicalCode,pointName:latestPointName||'',note:'',createdAt:Date.now(),userId:user.uid});renderHistory();if(scanStatus){scanStatus.textContent='已送出打卡'}closeQRModal()}}
 function openPostModal(showNote,showPhoto){if(!modalPostActions)return;modalPostActions.classList.remove('hidden');if(postNote)postNote.style.display=showNote?'block':'none';if(postPhoto)postPhoto.style.display=showPhoto?'block':'none'}
 function closePostModal(){if(!modalPostActions)return;modalPostActions.classList.add('hidden')}
-async function confirmPost(){const id=uuid();const user=auth&&auth.currentUser; if(!user||!navigator.onLine){closePostModal();return}const noteVal=postNote&&postNote.style.display!=='none'?(postNote.value||''):'';let photoData='';if(postPhoto&&postPhoto.style.display!=='none'&&postPhoto.files&&postPhoto.files[0]){const fr=new FileReader();fr.onload=async()=>{const blob=new Blob([fr.result]);photoData=await compressImageBlob(blob);await upsertCheckinCloud({id,pointCode:latestScanCode,pointName:latestPointName||'',note:noteVal,createdAt:Date.now(),userId:user.uid,photoData});renderHistory();closePostModal()};fr.readAsArrayBuffer(postPhoto.files[0])}else{await upsertCheckinCloud({id,pointCode:latestScanCode,pointName:latestPointName||'',note:noteVal,createdAt:Date.now(),userId:user.uid});renderHistory();closePostModal()}}
+async function confirmPost(){const id=uuid();const user=auth&&auth.currentUser; if(!user||!navigator.onLine){closePostModal();return}const tasks=await getAll('tasks');let found=null;for(const t of tasks){if(Array.isArray(t.pointsDetailed)){for(const p of t.pointsDetailed){if(p.qrCode===latestScanCode||p.pointCode===latestScanCode){found=p;break}}}if(found)break}const canonicalCode=(found&&found.pointCode)?found.pointCode:latestScanCode;const noteVal=postNote&&postNote.style.display!=='none'?(postNote.value||''):'';let photoData='';if(postPhoto&&postPhoto.style.display!=='none'&&postPhoto.files&&postPhoto.files[0]){const fr=new FileReader();fr.onload=async()=>{const blob=new Blob([fr.result]);photoData=await compressImageBlob(blob);await upsertCheckinCloud({id,pointCode:canonicalCode,pointName:latestPointName||'',note:noteVal,createdAt:Date.now(),userId:user.uid,photoData});renderHistory();closePostModal()};fr.readAsArrayBuffer(postPhoto.files[0])}else{await upsertCheckinCloud({id,pointCode:canonicalCode,pointName:latestPointName||'',note:noteVal,createdAt:Date.now(),userId:user.uid});renderHistory();closePostModal()}}
 async function upsertCheckinCloud(c){if(!auth||!navigator.onLine)return;await fsRestUpsert(`orgs/default/checkins/${c.id}`,c)}
 function tx(store,mode){
   return {
