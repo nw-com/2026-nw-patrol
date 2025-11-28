@@ -51,6 +51,7 @@ async function fsRestUpsert(path,obj){const pid=getProjectId();const url=`https:
 async function fsRestDelete(path){const pid=getProjectId();const url=`https://firestore.googleapis.com/v1/projects/${pid}/databases/(default)/documents/${path}`;const user=auth&&auth.currentUser;const token=user?await user.getIdToken():'';const res=await fetch(url,{method:'DELETE',headers:{...(token?{'Authorization':`Bearer ${token}`}:{})}});return res.ok}
 async function fsRestList(path){const pid=getProjectId();const url=`https://firestore.googleapis.com/v1/projects/${pid}/databases/(default)/documents/${path}`;const user=auth&&auth.currentUser;const token=user?await user.getIdToken():'';const res=await fetch(url,{headers:{...(token?{'Authorization':`Bearer ${token}`}:{})}});if(!res.ok)return [];const json=await res.json();const docs=json.documents||[];return docs.map(fromFsDoc)}
 async function fsRestGetDoc(path){const pid=getProjectId();const url=`https://firestore.googleapis.com/v1/projects/${pid}/databases/(default)/documents/${path}`;const user=auth&&auth.currentUser;const token=user?await user.getIdToken():'';const res=await fetch(url,{headers:{...(token?{'Authorization':`Bearer ${token}`}:{})}});if(!res.ok)return null;const json=await res.json();return fromFsDoc(json)}
+async function fsRestQueryCheckinsByUser(uid){const pid=getProjectId();const parent=`projects/${pid}/databases/(default)/documents/orgs/default`;const url=`https://firestore.googleapis.com/v1/${parent}:runQuery`;const user=auth&&auth.currentUser;const token=user?await user.getIdToken():'';const body={structuredQuery:{from:[{collectionId:'checkins'}],where:{fieldFilter:{field:{fieldPath:'userId'},op:'EQUAL',value:{stringValue:uid}}},orderBy:[{field:{fieldPath:'createdAt'},direction:'DESCENDING'}]}};const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json',...(token?{'Authorization':`Bearer ${token}`}:{})},body:JSON.stringify(body)});if(!res.ok)return [];const arr=await res.json();return arr.map(x=>fromFsDoc(x.document||{fields:{}})).filter(x=>x&&x.id)}
 
 const userEmail = document.getElementById('userEmail');
 const btnLogout = document.getElementById('btnLogout');
@@ -85,7 +86,7 @@ const pointsList = document.getElementById('pointsList');
 
 if(btnAddPoint){btnAddPoint.addEventListener('click',async()=>{return})}
 
-async function getAll(store){if(!auth||!navigator.onLine)return [];let path='';if(store==='communities')path='orgs/default/communities';else if(store==='accounts')path='orgs/default/accounts';else if(store==='tasks')path='orgs/default/tasks';else if(store==='checkins')path='orgs/default/checkins';else if(store==='points')path='';if(!path){return []}return await fsRestList(path)}
+async function getAll(store){if(!auth||!navigator.onLine)return [];let path='';if(store==='communities')path='orgs/default/communities';else if(store==='accounts')path='orgs/default/accounts';else if(store==='tasks')path='orgs/default/tasks';else if(store==='checkins')path='';else if(store==='points')path='';if(store==='checkins'){const u=auth.currentUser;return u?await fsRestQueryCheckinsByUser(u.uid):[]}if(!path){return []}return await fsRestList(path)}
 async function renderPoints(){const items=await getAll('points');if(!pointsList){updateHome();return}pointsList.innerHTML='';items.forEach(p=>{const el=document.createElement('div');el.className='item';el.innerHTML=`<div><strong>${p.name}</strong><br><span>${p.code}</span></div>`;pointsList.appendChild(el)});updateHome()}
 
 let camera = document.getElementById('camera');
@@ -179,7 +180,7 @@ const historyList = document.getElementById('historyList');
 const btnSync = document.getElementById('btnSync');
 const syncStatus = document.getElementById('syncStatus');
 
-async function renderHistory(){const items=await getAll('checkins');if(!historyList){updateHome();return}historyList.innerHTML='';items.sort((a,b)=>b.createdAt-a.createdAt).forEach(c=>{const el=document.createElement('div');el.className='item';const d=new Date(c.createdAt);el.innerHTML=`<div><strong>${c.pointName||c.pointCode}</strong><br><span>${d.toLocaleString()} • ${c.note||''}</span></div><span>已同步</span>`;historyList.appendChild(el)});updateHome()}
+async function renderHistory(){const items=await getAll('checkins');if(!historyList){updateHome();return}historyList.innerHTML='';items.forEach(c=>{const el=document.createElement('div');el.className='item';const d=new Date(c.createdAt);el.innerHTML=`<div><strong>${c.pointName||c.pointCode}</strong><br><span>${d.toLocaleString()} • ${c.note||''}</span></div><span>已同步</span>`;historyList.appendChild(el)});updateHome()}
 
 async function syncNow(){if(!auth||!navigator.onLine){if(syncStatus)syncStatus.textContent='無法同步';return}
   if(syncStatus)syncStatus.textContent='同步中';
@@ -218,7 +219,7 @@ if(btnQuickSync)btnQuickSync.addEventListener('click',syncNow);
 const homePointsCount=document.getElementById('homePointsCount');
 const homeCheckinsCount=document.getElementById('homeCheckinsCount');
 const homePendingCount=document.getElementById('homePendingCount');
-async function updateHome(){const pts=await getAll('points');const ch=await getAll('checkins');const pend=0;if(homePointsCount)homePointsCount.textContent=String(pts.length);if(homeCheckinsCount)homeCheckinsCount.textContent=String(ch.length);if(homePendingCount)homePendingCount.textContent=String(pend)}
+async function updateHome(){const [pts,ch]=await Promise.all([getAll('points'),getAll('checkins')]);const pend=0;if(homePointsCount)homePointsCount.textContent=String(pts.length);if(homeCheckinsCount)homeCheckinsCount.textContent=String(ch.length);if(homePendingCount)homePendingCount.textContent=String(pend)}
 
 const btnOpenCommunity=document.getElementById('btnOpenCommunity');
 const modalCommunity=document.getElementById('modalCommunity');
