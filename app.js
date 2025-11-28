@@ -23,24 +23,20 @@ const DEFAULT_FIREBASE_CONFIG = {
   measurementId: "G-2TTZ9018CJ"
 };
 
-let firebaseApp=null, auth=null, firestore=null;
-let db=null;
+let firebaseApp=null, auth=null;
 
 async function loadFirebase(){
   const appMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js');
   const authMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');
-  const fsMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');
   let cfgStr = localStorage.getItem('firebaseConfig');
   if(!cfgStr){cfgStr = JSON.stringify(DEFAULT_FIREBASE_CONFIG); localStorage.setItem('firebaseConfig', cfgStr);} 
   const cfg = JSON.parse(cfgStr);
   firebaseApp = appMod.initializeApp(cfg);
   auth = authMod.getAuth(firebaseApp);
   try{await authMod.setPersistence(auth, authMod.browserLocalPersistence)}catch(e){}
-  firestore = fsMod.initializeFirestore(firebaseApp,{experimentalForceLongPolling:true,useFetchStreams:false});
   
 }
 let authModCache=null;async function getAuthMod(){if(authModCache)return authModCache;authModCache=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');return authModCache}
-let fsModCache=null;async function getFsMod(){if(fsModCache)return fsModCache;fsModCache=await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');return fsModCache}
 // 已不使用離線密碼雜湊
 
 // IndexedDB 已完全移除
@@ -54,6 +50,7 @@ function fromFsDoc(doc){const f=(doc&&doc.fields)||{};const out={};Object.keys(f
 async function fsRestUpsert(path,obj){const pid=getProjectId();const url=`https://firestore.googleapis.com/v1/projects/${pid}/databases/(default)/documents/${path}`;const user=auth&&auth.currentUser;const token=user?await user.getIdToken():'';const body={fields:toFsFields(obj)};const res=await fetch(url,{method:'PATCH',headers:{'Content-Type':'application/json',...(token?{'Authorization':`Bearer ${token}`}:{})},body:JSON.stringify(body)});return res.ok}
 async function fsRestDelete(path){const pid=getProjectId();const url=`https://firestore.googleapis.com/v1/projects/${pid}/databases/(default)/documents/${path}`;const user=auth&&auth.currentUser;const token=user?await user.getIdToken():'';const res=await fetch(url,{method:'DELETE',headers:{...(token?{'Authorization':`Bearer ${token}`}:{})}});return res.ok}
 async function fsRestList(path){const pid=getProjectId();const url=`https://firestore.googleapis.com/v1/projects/${pid}/databases/(default)/documents/${path}`;const user=auth&&auth.currentUser;const token=user?await user.getIdToken():'';const res=await fetch(url,{headers:{...(token?{'Authorization':`Bearer ${token}`}:{})}});if(!res.ok)return [];const json=await res.json();const docs=json.documents||[];return docs.map(fromFsDoc)}
+async function fsRestGetDoc(path){const pid=getProjectId();const url=`https://firestore.googleapis.com/v1/projects/${pid}/databases/(default)/documents/${path}`;const user=auth&&auth.currentUser;const token=user?await user.getIdToken():'';const res=await fetch(url,{headers:{...(token?{'Authorization':`Bearer ${token}`}:{})}});if(!res.ok)return null;const json=await res.json();return fromFsDoc(json)}
 
 const userEmail = document.getElementById('userEmail');
 const btnLogout = document.getElementById('btnLogout');
@@ -184,7 +181,7 @@ const syncStatus = document.getElementById('syncStatus');
 
 async function renderHistory(){const items=await getAll('checkins');if(!historyList){updateHome();return}historyList.innerHTML='';items.sort((a,b)=>b.createdAt-a.createdAt).forEach(c=>{const el=document.createElement('div');el.className='item';const d=new Date(c.createdAt);el.innerHTML=`<div><strong>${c.pointName||c.pointCode}</strong><br><span>${d.toLocaleString()} • ${c.note||''}</span></div><span>已同步</span>`;historyList.appendChild(el)});updateHome()}
 
-async function syncNow(){if(!auth||!firestore||!navigator.onLine){if(syncStatus)syncStatus.textContent='無法同步';return}
+async function syncNow(){if(!auth||!navigator.onLine){if(syncStatus)syncStatus.textContent='無法同步';return}
   if(syncStatus)syncStatus.textContent='同步中';
   renderHistory();
   if(syncStatus)syncStatus.textContent='同步完成'
@@ -272,7 +269,7 @@ function buildServiceComms(container, selectAll){if(!container)return;container.
 
 async function renderAccounts(){if(!accountsList)return;const items=await getAll('accounts');accountsList.innerHTML='';items.forEach(a=>{const el=document.createElement('div');el.className='item';const svc=(a.serviceCommunities||[]).join(',');el.innerHTML=`<div>${a.role||''}</div><div>${a.name||''}</div><div>${a.phone||''}</div><div>${a.email||''}</div><div>${svc}</div><div><button class=\"btn\" data-act=\"edit\" data-id=\"${a.id}\">編輯</button> <button class=\"btn outline\" data-act=\"del\" data-id=\"${a.id}\">刪除</button></div>`;el.querySelector('[data-act="edit"]').addEventListener('click',()=>openAccountModal('edit',a));el.querySelector('[data-act="del"]').addEventListener('click',async()=>{if(!confirm(`確定要刪除帳號 ${a.name}？`))return;await deleteAccountCloud(a.id);renderAccounts()});accountsList.appendChild(el)})}
 
-async function ensureCurrentUserAccount(){const u=auth.currentUser;if(!u||!firestore)return;const fsMod=await getFsMod();const ref=fsMod.doc(firestore,`orgs/default/accounts/${u.uid}`);const snap=await fsRetry(()=>fsMod.getDoc(ref));if(snap&&snap.exists())return;const item={id:u.uid,role:'一般',name:u.displayName||'',phone:'',email:u.email||'',serviceCommunities:[],updatedAt:Date.now()};await upsertAccountCloud(item);renderAccounts()}
+async function ensureCurrentUserAccount(){const u=auth.currentUser;if(!u)return;const ex=await fsRestGetDoc(`orgs/default/accounts/${u.uid}`);if(ex)return;const item={id:u.uid,role:'一般',name:u.displayName||'',phone:'',email:u.email||'',serviceCommunities:[],updatedAt:Date.now()};await upsertAccountCloud(item);renderAccounts()}
 
 function openCommunityModal(mode,data){modalCommunity.classList.remove('hidden');modalCommunity.dataset.mode=mode||'create';mCommCode.disabled=mode==='edit';mCommCode.value=data?data.code:'';mCommName.value=data?data.name:'';mCommArea.value=data?data.area:'台北';if(!mCommArea.value)mCommArea.value='台北'}
 function closeCommunityModal(){modalCommunity.classList.add('hidden')}
